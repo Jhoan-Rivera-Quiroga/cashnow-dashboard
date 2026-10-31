@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.sheetjs.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Cash Now Dashboard</title>
+<link rel="icon" href="assets/cashnow-logo.png">
+<link rel="stylesheet" href="css/app.css">
+<!-- Pinned versions with integrity hashes: the browser refuses the file if a CDN ever serves different code. -->
+<script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" integrity="sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/echarts@5.6.0/dist/echarts.min.js" integrity="sha384-pPi0zxBAoDu6+JXW/C68UZLvBUUtU+7zonhif43rqj7pxsGyqyqzcian2Rj37Rss" crossorigin="anonymous"></script>
+<script defer src="js/format.js"></script>
+<script defer src="js/data.js"></script>
+<script defer src="js/pickups.js"></script>
+<script defer src="js/app.js"></script>
+</head>
+<body data-view="welcome">
+<div class="frame">
+  <aside class="sidebar">
+    <a class="brand" href="#/pickups"><img src="assets/cashnow-logo.png" alt="Cash Now Test Strips" width="160" height="150"></a>
+    <nav class="nav" aria-label="Report pages">
+      <a class="nav-item" id="nav-pickups" href="#/pickups">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 15.5V9.5h9V7h4.2l3.3 4.2 2.5.8v3.5"/><circle cx="6.5" cy="16.5" r="1.8"/><circle cx="17" cy="16.5" r="1.8"/></svg>
+        <span>Pick Ups</span>
+      </a>
+      <a class="nav-item" aria-disabled="true" title="Coming soon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 15.5V9.5h9V7h4.2l3.3 4.2 2.5.8v3.5"/><circle cx="6.5" cy="16.5" r="1.8"/><circle cx="17" cy="16.5" r="1.8"/></svg>
+        <span>Drivers</span>
+      </a>
+      <a class="nav-item" aria-disabled="true" title="Coming soon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 15.5V9.5h9V7h4.2l3.3 4.2 2.5.8v3.5"/><circle cx="6.5" cy="16.5" r="1.8"/><circle cx="17" cy="16.5" r="1.8"/></svg>
+        <span>Insights</span>
+      </a>
+      <a class="nav-item" aria-disabled="true" title="Coming soon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="1.5"/><path d="m3.5 6.5 8.5 6.5 8.5-6.5"/></svg>
+        <span>Mail Order</span>
+      </a>
+      <a class="nav-item" aria-disabled="true" title="Coming soon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18.5h2"/></svg>
+        <span>Electronics</span>
+      </a>
+      <a class="nav-item" aria-disabled="true" title="Coming soon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="1.5"/><path d="m3.5 6.5 8.5 6.5 8.5-6.5"/></svg>
+        <span>Vendors &amp; Products</span>
+      </a>
+      <a class="nav-item" aria-disabled="true" title="Coming soon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/></svg>
+        <span>Demographics</span>
+      </a>
+      <a class="nav-item" aria-disabled="true" title="Coming soon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m5.7 5.7 12.6 12.6"/></svg>
+        <span>Cancelled</span>
+      </a>
+      <a class="nav-item" aria-disabled="true" title="Coming soon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.5 3.5h3.2l1.8 4.6-2.3 1.4a11 11 0 0 0 6.3 6.3l1.4-2.3 4.6 1.8v3.2a2 2 0 0 1-2.2 2A17 17 0 0 1 3.5 5.7a2 2 0 0 1 2-2.2z"/></svg>
+        <span>Call Report</span>
+      </a>
+      <p class="nav-note">Other pages are coming next.</p>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <section class="view welcome" id="view-welcome">
+      <div class="welcome-card">
+        <img src="assets/cashmoney-logo.png" alt="Cash Money Test Strips" width="216" height="62">
+        <h1>Pick Ups dashboard</h1>
+        <p>Open <b>Historical Raw Data.xlsx</b> to see the report.</p>
+        <button type="button" class="btn-primary" id="open-file">Open workbook</button>
+        <p class="hint">or drop the file anywhere on this page</p>
+        <p class="privacy">The file is read inside this browser. Nothing is uploaded or saved.</p>
+        <p class="error" id="load-error" role="alert" hidden></p>
+      </div>
+    </section>
+
+    <section class="view" id="view-pickups" hidden>
+      <header class="toolbar">
+        <img class="logo" src="assets/cashmoney-logo.png" alt="Cash Money Test Strips" width="216" height="62">
+        <div class="field">
+          <span class="field-label" id="state-label">State</span>
+          <details class="multi" id="state-filter">
+            <summary aria-labelledby="state-label state-summary"><span id="state-summary">All</span></summary>
+            <div class="multi-panel">
+              <label class="multi-all"><input type="checkbox" id="state-all" checked>Select all</label>
+              <div id="state-options"></div>
+            </div>
+          </details>
+        </div>
+        <div class="field">
+          <span class="field-label">Date</span>
+          <div class="date-range">
+            <input class="control" type="date" id="date-from" aria-label="From">
+            <span aria-hidden="true">–</span>
+            <input class="control" type="date" id="date-to" aria-label="To">
+          </div>
+        </div>
+        <div class="field">
+          <label class="field-label" for="date-preset">Range</label>
+          <select class="control" id="date-preset"></select>
+        </div>
+        <div class="field">
+          <label class="field-label" for="granularity">Dynamic Date</label>
+          <select class="control" id="granularity">
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+        </div>
+        <img class="logo logo-right" src="assets/cashmoney-logo.png" alt="" width="216" height="62">
+      </header>
+
+      <div class="kpis">
+        <div class="kpi"><div class="kpi-value" id="kpi-cash">–</div><div class="kpi-label">Total Cash Spent</div></div>
+        <div class="kpi"><div class="kpi-value" id="kpi-product">–</div><div class="kpi-label">Top Product<span class="kpi-amt" id="kpi-product-amt"></span></div></div>
+        <div class="kpi"><div class="kpi-value" id="kpi-driver">–</div><div class="kpi-label">Top Driver<span class="kpi-amt" id="kpi-driver-amt"></span></div></div>
+        <div class="kpi"><div class="kpi-value" id="kpi-vendor">–</div><div class="kpi-label">Top Vendor<span class="kpi-amt" id="kpi-vendor-amt"></span></div></div>
+        <div class="kpi"><div class="kpi-value" id="kpi-pickups">–</div><div class="kpi-label">Total Pick ups</div></div>
+        <div class="kpi"><div class="kpi-value" id="kpi-avg">–</div><div class="kpi-label">Avrg Pick up</div></div>
+        <button type="button" class="details-btn" id="details-btn">Details</button>
+      </div>
+
+      <section class="chart-card">
+        <h2>Cash Spent by Date</h2>
+        <div class="selection" id="selection-bar" hidden>
+          <span>Showing <b id="selection-label"></b></span>
+          <button type="button" id="clear-selection">Clear</button>
+        </div>
+        <div class="chart" id="chart-cash" role="img" aria-label="Cash spent by date. Click a point to filter the page."></div>
+      </section>
+      <section class="chart-card">
+        <h2>Pick Up's by Date</h2>
+        <div class="chart" id="chart-pickups" role="img" aria-label="Pick-ups by date. Click a point to filter the page."></div>
+      </section>
+    </section>
+
+    <section class="view details" id="view-details" hidden>
+      <div class="details-head">
+        <a class="back" id="details-back" href="#/pickups" aria-label="Back to Pick Ups">
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="24" cy="24" r="22"/><path d="M36 24H12m9-9-9 9 9 9"/></svg>
+        </a>
+        <div class="details-title">
+          <h1>Pick Up Detail</h1>
+          <p id="details-context"></p>
+        </div>
+        <button type="button" class="btn" id="details-export">Download CSV</button>
+      </div>
+      <div class="table-wrap">
+        <table class="detail-table" id="details-table">
+          <thead>
+            <tr>
+              <th data-sort="day" aria-sort="ascending"><button type="button">Date</button></th>
+              <th data-sort="order" aria-sort="none"><button type="button">Order Number</button></th>
+              <th data-sort="vendor" aria-sort="none"><button type="button">First_Name</button></th>
+              <th data-sort="city" aria-sort="none"><button type="button">City</button></th>
+              <th data-sort="product" aria-sort="none"><button type="button">Product_Code</button></th>
+              <th data-sort="units" aria-sort="none" class="num"><button type="button">Quantity</button></th>
+              <th data-sort="cash" aria-sort="none" class="num"><button type="button">Cash Spent</button></th>
+            </tr>
+          </thead>
+          <tbody id="details-body"></tbody>
+          <tfoot>
+            <tr><td colspan="5">Total</td><td class="num" id="details-units"></td><td class="num" id="details-cash"></td></tr>
+          </tfoot>
+        </table>
+      </div>
+      <button type="button" class="btn more" id="details-more" hidden></button>
+    </section>
+
+    <footer class="status" id="status" hidden>
+      <span id="status-file"></span>
+      <button type="button" class="link" id="status-notes">Data notes</button>
+      <button type="button" class="link" id="status-open">Open another file</button>
+      <span class="status-error" id="status-error" role="alert" hidden></span>
+    </footer>
+  </main>
+</div>
+
+<dialog id="notes-dialog" aria-labelledby="notes-title">
+  <h2 id="notes-title">Data notes</h2>
+  <ul id="notes-list"></ul>
+  <button type="button" class="btn" id="notes-close">Close</button>
+</dialog>
+<input type="file" id="file-input" accept=".xlsx,.xlsm,.xlsb,.xls" hidden>
+<div class="overlay" id="overlay" hidden><div class="spinner"></div><p id="overlay-text">Reading workbook…</p></div>
+</body>
+</html>

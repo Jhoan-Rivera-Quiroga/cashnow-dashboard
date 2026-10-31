@@ -1,0 +1,13 @@
+# Business data never goes in this repo: the dashboard reads it at runtime.
+*.xlsx
+*.xlsm
+*.xlsb
+*.xls
+*.csv
+*.pbix
+
+# Local tooling
+.claude/
+.vscode/
+.DS_Store
+Thumbs.db
