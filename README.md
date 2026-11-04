@@ -8,28 +8,79 @@ in the menu and come next.
 
 ## Your data stays out of this repository
 
-This repository holds code only. The workbook (`Historical Raw Data.xlsx`) is opened inside the
-viewer's browser and is never uploaded anywhere or committed here. `.gitignore` blocks Excel, CSV
-and `.pbix` files so they can't be committed by accident.
+This repository holds code only. The data lives in a Google Sheet that only the people it's shared
+with can open. Each viewer signs in with Google, and their browser reads the sheet straight from
+Google. The data never passes through any other server and isn't saved anywhere.
 
-The page makes no network requests except to load two pinned libraries, and each one is checked against
-an integrity hash.
+A workbook file (`Historical Raw Data.xlsx`) can still be opened instead. It's read inside the browser
+and never uploaded. `.gitignore` blocks Excel, CSV and `.pbix` files so they can't be committed by
+accident.
+
+SheetJS and ECharts load from pinned versions, each checked against an integrity hash. Google's
+sign-in and file chooser scripts come from Google and can't be pinned that way, because Google updates
+them. They load only once Google sign-in is set up in `js/config.js`.
+
+[`privacy.html`](privacy.html) is the privacy policy that Google's sign-in window links to.
 
 ## Using it
 
 1. Open the site: https://jhoan-rivera-quiroga.github.io/cashnow-dashboard/
-2. Click **Open workbook** (or drop the file on the page) and choose `Historical Raw Data.xlsx`.
+2. Click **Sign in with Google** and use the Google account the data sheet is shared with.
+3. The first time, select the data sheet in Google's file chooser.
+
+At the bottom of the page, **Refresh** loads the latest rows and **Sign out** clears the data from the
+page. **Choose another sheet** appears when `js/config.js` doesn't name the sheet.
+
+To use a file instead, choose **open a workbook file** on the start page, or drop the file on the page.
 
 The page works like the Power BI one:
 
 - **State**, **Date** and **Dynamic Date** (Daily / Weekly / Monthly) filter the page. **Range** has
   quick choices such as *Last 4 months* (the default) or *Year to date*, counted back from the
-  latest date in the file.
+  latest date in the data.
 - Clicking a point in either chart filters the cards to that day, week or month. Click it again, press
   Esc or use **Clear** to undo.
 - **Details** lists the pick-ups behind the current view. Without a selected point it lists the whole
   date range. The table sorts by any column and downloads as CSV.
 - The address bar keeps the filters, so a bookmark reopens the same view.
+
+## Setting up Google sign-in
+
+This is done once, in a Google Cloud project:
+
+- Turn on the **Google Sheets API** and the **Google Picker API**.
+- Set up the consent screen (**Google Auth Platform**) for **External** users and add the
+  `https://www.googleapis.com/auth/drive.file` scope. That scope is non-sensitive, so Google doesn't
+  need to review the app.
+- On the **Branding** page, add `jhoan-rivera-quiroga.github.io` as an authorized domain, the
+  dashboard's address as the home page and `privacy.html` as the privacy policy:
+  `https://jhoan-rivera-quiroga.github.io/cashnow-dashboard/privacy.html`. Google won't publish the
+  app without the home page and privacy policy. Don't upload a logo: a logo needs brand verification
+  first. Without brand verification, Google's sign-in window shows the site's address instead of the
+  app's name.
+- Publish the app on the **Audience** page. Until then it's in Testing: only the test users listed
+  there can sign in, and Google asks them for permission again every 7 days.
+- Create an OAuth client of type **Web application** with these authorized JavaScript origins:
+  `https://jhoan-rivera-quiroga.github.io` and `http://localhost:8000`.
+- Create an API key. Restrict it to these websites: `https://jhoan-rivera-quiroga.github.io/*`,
+  `https://docs.google.com/*` (Google's file chooser runs there) and `http://localhost:8000/*`.
+  Restrict it to the Google Picker API.
+
+Then put the client ID and the API key in `js/config.js`. Neither one is a secret: every browser that
+opens the page can see them, and they only work from the addresses above.
+
+`js/config.js` can also hold the sheet's ID, the part of its link between `/d/` and `/edit`. With it,
+each person uses Google's file chooser only on their first sign-in, and every device after that goes
+straight to the data. Without it, the chooser comes up once in every browser. The chooser may not open
+in browsers that block third-party cookies, such as Safari on iPhone, so do that first sign-in on a
+computer. The ID opens nothing for anyone the sheet isn't shared with.
+
+To let someone in, share the Google Sheet with their Google account. **Viewer** access is enough.
+
+The first time someone signs in, Google asks them to let the dashboard "see, edit, create and delete
+only the specific Google Drive files you use with this app". That is Google's standard wording for the
+`drive.file` permission. The dashboard can open only the sheet each person picks, and its code only
+reads it.
 
 ## Running it on your computer
 
@@ -39,13 +90,15 @@ Any static file server works. With Python installed:
 python -m http.server 8000
 ```
 
-Then open http://localhost:8000.
+Then open http://localhost:8000. Google sign-in works there too, because the setup above allows that
+address.
 
 ## How the numbers are calculated
 
 The page reads the **Collection** sheet, using these columns: `Collection_Date`, `Collection_Order_No`,
 `First_Name`, `City`, `State`, `Assign_to`, `Product_Code`, `Quantity` and `Comments` (`Comments`
-holds the dollars paid). If a column is renamed, the page names the missing one.
+holds the dollars paid). From Google Sheets it downloads only those columns. If a column is renamed,
+the page names the missing one.
 
 | Measure | Definition |
 |---|---|
@@ -56,7 +109,7 @@ holds the dollars paid). If a column is renamed, the page names the missing one.
 
 Cleaning rules:
 
-- Dates may be real Excel dates or text such as `2026-03-11`.
+- Dates may be real dates or text such as `2026-03-11`.
 - Names that differ only in capital letters or extra spaces count as one (`PAUL` and `Paul`), and each
   is shown with the spelling that appears first in the sheet, both as in Power BI.
 - Amounts typed as text with a decimal comma (`77,5`) are read as 77.5. Power BI reads them as 775,
@@ -65,11 +118,11 @@ Cleaning rules:
 
 ## Next steps
 
-- Microsoft sign-in, so the page reads the workbook straight from SharePoint and needs no file picking.
 - The remaining pages: Drivers, Insights, Mail Order, Electronics, Vendors & Products, Demographics,
   Cancelled, Call Report and Mail Details.
 
 ## Built with
 
-[SheetJS](https://sheetjs.com) 0.20.3 reads the workbook and [Apache ECharts](https://echarts.apache.org)
-5.6.0 draws the charts. Everything else is plain HTML, CSS and JavaScript, with no build step.
+[SheetJS](https://sheetjs.com) 0.20.3 reads workbook files and [Apache ECharts](https://echarts.apache.org)
+5.6.0 draws the charts. Google Identity Services handles sign-in, the Google Picker chooses the sheet,
+and the Google Sheets API reads it. Everything else is plain HTML, CSS and JavaScript, with no build step.

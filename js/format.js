@@ -13,6 +13,7 @@
   const dayLongFmt = utc({ month: 'short', day: 'numeric', year: 'numeric' });
   const monthFmt = utc({ month: 'short', year: 'numeric' });
   const monthLongFmt = utc({ month: 'long', year: 'numeric' });
+  const clockFmt = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }); // viewer's own time zone
 
   const toDate = s => new Date((s - EPOCH) * DAY_MS);
   const fromYmd = (y, m, d) => Date.UTC(y, m - 1, d) / DAY_MS + EPOCH;
@@ -42,5 +43,6 @@
     dayLong: s => dayLongFmt.format(toDate(s)), // Mar 8, 2026
     month: s => monthFmt.format(toDate(s)), // Mar 2026
     monthLong: s => monthLongFmt.format(toDate(s)), // March 2026
+    clock: date => clockFmt.format(date), // 10:42 AM
   };
 })(window.CashNow = window.CashNow || {});

@@ -148,6 +148,7 @@ body[data-view="details"] .main { background: var(--detail-bg); }
 .btn-primary:hover { background: #8f2a84; }
 .btn-primary:disabled { background: #b9a9b7; cursor: default; }
 .privacy { font-size: 13px; }
+.privacy a { color: #50005c; font-weight: 600; }
 .welcome-card .error { padding: 10px 12px; background: #fde8f0; border-radius: 8px; color: #a1003b; font-size: 14px; text-align: left; }
 body.dropping .main { outline: 3px dashed #fff; outline-offset: -12px; }
 
@@ -193,6 +194,21 @@ dialog ul { padding-left: 20px; font-size: 14px; line-height: 1.5; }
 dialog li { margin-bottom: 8px; }
 dialog li ul { margin-top: 4px; font-size: 13px; }
 
+/* Privacy policy page */
+.policy {
+  max-width: 720px; margin: 14px auto; padding: 26px 36px 30px;
+  background: var(--surface); border-radius: 26px; line-height: 1.55;
+  box-shadow: 0 10px 30px rgba(80, 0, 80, .15);
+}
+.policy img { display: block; width: 88px; height: auto; }
+.policy h1 { margin: 14px 0 2px; font-size: 26px; }
+.policy h2 { margin: 24px 0 4px; font-size: 18px; }
+.policy p, .policy li { font-size: 15px; }
+.policy ul { padding-left: 22px; }
+.policy li { margin-bottom: 6px; }
+.policy a { color: #50005c; font-weight: 600; }
+.policy .updated { margin: 0; color: var(--muted); font-size: 13px; }
+
 .overlay {
   position: fixed; inset: 0; z-index: 50; display: grid; place-content: center; justify-items: center; gap: 14px;
   background: rgba(242, 207, 239, .85); color: #50005c; font-weight: 600;
@@ -230,4 +246,5 @@ dialog li ul { margin-top: 4px; font-size: 13px; }
   .chart-card { padding: 8px 8px 2px; border-radius: 20px; }
   .selection { position: static; display: flex; width: fit-content; margin: 6px auto 0; }
   .table-wrap { max-height: none; }
+  .policy { margin: 0; padding: 22px 16px 28px; border-radius: 0; }
 }

@@ -1,4 +1,5 @@
-/* Reads the workbook with SheetJS and turns the Collection table into clean columns. */
+/* Turns the Collection table into clean columns, from a workbook file (read with SheetJS)
+   or from rows that js/google.js reads from Google Sheets. */
 (function (CN) {
   'use strict';
   const F = CN.fmt;
@@ -80,22 +81,15 @@
     labels() { return this.names; }
   }
 
-  function readWorkbook(buffer, fileName) {
-    const bytes = new Uint8Array(buffer);
-    const names = XLSX.read(bytes, { type: 'array', bookSheets: true }).SheetNames;
+  // The sheet the Pick Ups pages read; `what` names the file in the error message.
+  function findSheet(names, what) {
     const sheet = names.find(n => key(n) === 'collection');
-    if (!sheet) throw new DataError(`This workbook has no "Collection" sheet. Its sheets are: ${names.join(', ')}.`);
-    const wb = XLSX.read(bytes, { type: 'array', sheets: [sheet], dense: true, cellText: false, cellHTML: false });
-    const props = wb.Workbook && wb.Workbook.WBProps;
-    return { fileName, sheets: names, pickups: readPickups(wb.Sheets[sheet], sheet, props && props.date1904 ? 1462 : 0) };
+    if (!sheet) throw new DataError(`${what} has no "Collection" sheet. Its sheets are: ${names.join(', ')}.`);
+    return sheet;
   }
 
-  function readPickups(ws, sheet, dateOffset) {
-    if (!ws || !ws['!ref']) throw new DataError(`The "${sheet}" sheet is empty.`);
-    const firstRow = XLSX.utils.decode_range(ws['!ref']).s.r; // 0-based Excel row of rows[0]
-    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null, blankrows: true });
-    const h = rows.findIndex(r => r.some(v => v != null));
-    const header = rows[h] || [];
+  // Position of each Pick Ups column in the header row.
+  function pickupColumns(header, sheet) {
     const col = {}, missing = [];
     for (const [field, name] of Object.entries(PICKUP_COLUMNS)) {
       col[field] = header.findIndex(v => key(v) === key(name));
@@ -103,8 +97,32 @@
     }
     if (missing.length) {
       throw new DataError(`The "${sheet}" sheet is missing ${missing.length === 1 ? 'the column' : 'these columns'} ` +
-        `${missing.join(', ')}. Its columns are: ${header.filter(v => v != null).join(', ')}.`);
+        `${missing.join(', ')}. Its columns are: ${header.filter(v => v != null && v !== '').join(', ')}.`);
     }
+    return col;
+  }
+
+  function readWorkbook(buffer, fileName) {
+    const bytes = new Uint8Array(buffer);
+    const names = XLSX.read(bytes, { type: 'array', bookSheets: true }).SheetNames;
+    const sheet = findSheet(names, 'This workbook');
+    const wb = XLSX.read(bytes, { type: 'array', sheets: [sheet], dense: true, cellText: false, cellHTML: false });
+    const ws = wb.Sheets[sheet];
+    if (!ws || !ws['!ref']) throw new DataError(`The "${sheet}" sheet is empty.`);
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null, blankrows: true });
+    const props = wb.Workbook && wb.Workbook.WBProps;
+    return {
+      name: fileName, source: 'file', sheets: names,
+      pickups: readPickups(rows, XLSX.utils.decode_range(ws['!ref']).s.r, sheet, props && props.date1904 ? 1462 : 0),
+    };
+  }
+
+  // rows: one array of raw cell values per sheet row (numbers, dates as serial numbers, text,
+  // true/false, or null when empty); rows[0] is the sheet's row firstRow + 1.
+  function readPickups(rows, firstRow, sheet, dateOffset) {
+    const h = rows.findIndex(r => r.some(v => v != null));
+    if (h < 0) throw new DataError(`The "${sheet}" sheet is empty.`);
+    const col = pickupColumns(rows[h], sheet);
 
     const cap = rows.length - h - 1;
     const day = new Int32Array(cap), amount = new Float64Array(cap), units = new Float64Array(cap);
@@ -172,5 +190,5 @@
     return out;
   }
 
-  CN.data = { readWorkbook, toNumber, toDay, DataError };
+  CN.data = { readWorkbook, readPickups, findSheet, pickupColumns, toNumber, toDay, DataError };
 })(window.CashNow = window.CashNow || {});

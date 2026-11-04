@@ -3,8 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.sheetjs.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
-<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.sheetjs.com https://cdn.jsdelivr.net https://accounts.google.com/gsi/ https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://sheets.googleapis.com; frame-src https://docs.google.com; object-src 'none'; base-uri 'none'; form-action 'none'">
+<!-- Other sites see only this site's address, never the page path or filters. Google's file chooser
+     needs that much to check its API key. -->
+<meta name="referrer" content="strict-origin">
 <title>Cash Now Dashboard</title>
 <link rel="icon" href="assets/cashnow-logo.png">
 <link rel="stylesheet" href="css/app.css">
@@ -13,6 +15,8 @@
 <script defer src="https://cdn.jsdelivr.net/npm/echarts@5.6.0/dist/echarts.min.js" integrity="sha384-pPi0zxBAoDu6+JXW/C68UZLvBUUtU+7zonhif43rqj7pxsGyqyqzcian2Rj37Rss" crossorigin="anonymous"></script>
 <script defer src="js/format.js"></script>
 <script defer src="js/data.js"></script>
+<script defer src="js/config.js"></script>
+<script defer src="js/google.js"></script>
 <script defer src="js/pickups.js"></script>
 <script defer src="js/app.js"></script>
 </head>
@@ -66,10 +70,18 @@
       <div class="welcome-card">
         <img src="assets/cashmoney-logo.png" alt="Cash Money Test Strips" width="216" height="62">
         <h1>Pick Ups dashboard</h1>
-        <p>Open <b>Historical Raw Data.xlsx</b> to see the report.</p>
-        <button type="button" class="btn-primary" id="open-file">Open workbook</button>
-        <p class="hint">or drop the file anywhere on this page</p>
-        <p class="privacy">The file is read inside this browser. Nothing is uploaded or saved.</p>
+        <div id="start-google" hidden>
+          <p id="google-hint">Sign in with the Google account the data sheet is shared with.</p>
+          <button type="button" class="btn-primary" id="google-signin" disabled>Sign in with Google</button>
+          <p class="hint">or <button type="button" class="link" id="open-file-alt">open a workbook file</button></p>
+        </div>
+        <div id="start-file">
+          <p>Open <b>Historical Raw Data.xlsx</b> to see the report.</p>
+          <button type="button" class="btn-primary" id="open-file">Open workbook</button>
+          <p class="hint">or drop the file anywhere on this page</p>
+        </div>
+        <p class="privacy"><span id="privacy">The file is read inside this browser. Nothing is uploaded or saved.</span>
+          <a href="privacy.html">Privacy policy</a></p>
         <p class="error" id="load-error" role="alert" hidden></p>
       </div>
     </section>
@@ -170,6 +182,10 @@
     <footer class="status" id="status" hidden>
       <span id="status-file"></span>
       <button type="button" class="link" id="status-notes">Data notes</button>
+      <button type="button" class="link" id="status-refresh" hidden>Refresh</button>
+      <button type="button" class="link" id="status-choose" hidden>Choose another sheet</button>
+      <button type="button" class="link" id="status-signout" title="Clears the data from this page" hidden>Sign out</button>
+      <button type="button" class="link" id="status-google" hidden>Sign in with Google</button>
       <button type="button" class="link" id="status-open">Open another file</button>
       <span class="status-error" id="status-error" role="alert" hidden></span>
     </footer>

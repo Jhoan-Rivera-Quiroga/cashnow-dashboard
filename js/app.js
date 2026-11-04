@@ -1,10 +1,11 @@
-/* App shell: opening the workbook, page routing, the status bar and data notes. */
+/* App shell: loading the data (Google Sheets or a workbook file), page routing, the status bar
+   and data notes. */
 (function (CN) {
   'use strict';
   const F = CN.fmt;
   const $ = id => document.getElementById(id);
   const VIEWS = ['welcome', 'pickups', 'details'];
-  let book = null; // { fileName, sheets, pickups }
+  let book = null; // { name, source: 'google' | 'file', sheets, pickups, loadedAt }
 
   const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
   const esc = s => String(s).replace(/[&<>"']/g, c => ESC[c]);
@@ -35,10 +36,12 @@
     if (text) $('overlay-text').textContent = text;
   }
 
-  function fail(err) {
+  // what: the fallback message for errors that aren't about the data itself.
+  function fail(err, what) {
+    if (err instanceof CN.google.Cancelled) return;
     console.error(err);
     const msg = err instanceof CN.data.DataError ? err.message
-      : `This file couldn't be read as an Excel workbook (${err && err.message ? err.message : err}).`;
+      : `${what} (${err && err.message ? err.message : err}).`;
     if (book) {
       $('status-error').textContent = msg;
       $('status-error').hidden = false;
@@ -48,21 +51,45 @@
     }
   }
 
+  function clearErrors() {
+    $('load-error').hidden = true;
+    $('status-error').hidden = true;
+  }
+
+  function useBook(loaded) {
+    book = Object.assign(loaded, { loadedAt: new Date() });
+    CN.pickups.load(book.pickups);
+    clearErrors();
+    renderStatus();
+    if (!/^#\/pickups/.test(location.hash)) history.replaceState(null, '', '#/pickups');
+    route();
+  }
+
   async function loadWorkbook(buffer, fileName) {
     busy(`Reading ${fileName}…`);
     await new Promise(r => setTimeout(r, 30)); // let the overlay paint before the heavy work
     try {
       const t0 = performance.now();
-      book = CN.data.readWorkbook(buffer, fileName);
-      CN.pickups.load(book.pickups);
+      const loaded = CN.data.readWorkbook(buffer, fileName);
       console.info(`Read ${fileName} in ${Math.round(performance.now() - t0)} ms`);
-      $('load-error').hidden = true;
-      $('status-error').hidden = true;
-      renderStatus();
-      if (!/^#\/pickups/.test(location.hash)) history.replaceState(null, '', '#/pickups');
-      route();
+      useBook(loaded);
     } catch (err) {
-      fail(err);
+      fail(err, "This file couldn't be read as an Excel workbook");
+    } finally {
+      busy(null);
+    }
+  }
+
+  // Runs straight from a click, because signing in opens Google's popup window.
+  async function loadFromGoogle(options) {
+    clearErrors();
+    try {
+      const t0 = performance.now();
+      const loaded = await CN.google.connect(busy, options);
+      console.info(`Read ${loaded.name} from Google Sheets in ${Math.round(performance.now() - t0)} ms`);
+      useBook(loaded);
+    } catch (err) {
+      fail(err, "The sheet couldn't be read");
     } finally {
       busy(null);
     }
@@ -72,6 +99,10 @@
     if (!file) return;
     if (!/\.(xlsx|xlsm|xlsb|xls)$/i.test(file.name)) {
       fail(new CN.data.DataError(`"${file.name}" isn't an Excel workbook. Open Historical Raw Data.xlsx.`));
+      return;
+    }
+    if (!window.XLSX) {
+      fail(new CN.data.DataError("The Excel library didn't load, so files can't be opened. Reload the page and try again."));
       return;
     }
     let buffer;
@@ -91,12 +122,34 @@
   }
 
   function renderStatus() {
-    const p = book.pickups;
-    $('status-file').textContent =
-      `${book.fileName} · ${F.int(p.n)} pick-up lines · ${F.dayLong(p.minDay)} – ${F.dayLong(p.maxDay)}`;
+    const p = book.pickups, google = book.source === 'google';
+    $('status-file').textContent = [
+      google ? `${book.name} (Google Sheets)` : book.name,
+      `${F.int(p.n)} pick-up lines`,
+      `${F.dayLong(p.minDay)} – ${F.dayLong(p.maxDay)}`,
+      google ? `loaded ${F.clock(book.loadedAt)}` : '',
+    ].filter(Boolean).join(' · ');
     const count = noteCount(p.notes);
     $('status-notes').textContent = count ? `Data notes (${count})` : 'Data notes';
+    for (const id of ['status-refresh', 'status-choose', 'status-signout']) $(id).hidden = !google;
+    if (CN.google.fixedSheet) $('status-choose').hidden = true; // js/config.js names the sheet
+    $('status-google').hidden = google || !CN.google.enabled;
+    $('status-open').hidden = google;
     $('status').hidden = false;
+  }
+
+  // The start screen offers Google Sheets once js/config.js is filled in, and a workbook file otherwise.
+  function setUpStart() {
+    const google = CN.google.enabled;
+    $('start-google').hidden = !google;
+    $('start-file').hidden = google;
+    $('privacy').textContent = google
+      ? "The data goes straight from Google Sheets to this browser and isn't stored anywhere else."
+      : 'The file is read inside this browser. Nothing is uploaded or saved.';
+    if (!google) return;
+    const saved = CN.google.remembered();
+    if (saved) $('google-hint').textContent = `Sign in with Google to load ${saved.name}.`;
+    CN.google.init().then(() => { $('google-signin').disabled = false; }, err => fail(err));
   }
 
   function renderNotes() {
@@ -126,7 +179,8 @@
   }
 
   document.addEventListener('DOMContentLoaded', () => {
-    if (!window.XLSX || !window.echarts) {
+    // The Excel library is needed only for workbook files.
+    if (!window.echarts || (!window.XLSX && !CN.google.enabled)) {
       $('load-error').textContent = "The Excel and chart libraries didn't load, so the dashboard can't start. " +
         'Check the internet connection and reload the page.';
       $('load-error').hidden = false;
@@ -134,9 +188,15 @@
       return;
     }
     CN.pickups.init();
+    setUpStart();
     const pick = () => $('file-input').click();
-    $('open-file').addEventListener('click', pick);
-    $('status-open').addEventListener('click', pick);
+    for (const id of ['open-file', 'open-file-alt', 'status-open']) $(id).addEventListener('click', pick);
+    $('google-signin').addEventListener('click', () => loadFromGoogle());
+    $('status-google').addEventListener('click', () => loadFromGoogle());
+    $('status-refresh').addEventListener('click', () => loadFromGoogle());
+    $('status-choose').addEventListener('click', () => loadFromGoogle({ choose: true }));
+    // Reloading drops the sign-in and the data, which live only in this page's memory.
+    $('status-signout').addEventListener('click', () => location.reload());
     $('file-input').addEventListener('change', e => {
       openFile(e.target.files[0]);
       e.target.value = '';
@@ -163,5 +223,5 @@
     route();
   });
 
-  CN.app = { loadWorkbook };
+  CN.app = { loadWorkbook, useBook };
 })(window.CashNow = window.CashNow || {});
