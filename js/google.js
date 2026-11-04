@@ -145,8 +145,8 @@
   }
 
   async function api(path, params, accessToken) {
-    const url = new URL(SHEETS_API + path);
-    for (const [k, v] of params) url.searchParams.append(k, v);
+    // %20 rather than + for spaces, as in Google's examples ("Driver Payouts").
+    const url = SHEETS_API + path + '?' + params.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
     let res;
     try {
       res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
@@ -183,29 +183,52 @@
     return s;
   }
 
-  // Reads the Collection sheet. Only the columns the dashboard uses are downloaded.
+  // Google leaves out empty cells at the end of a column and sends "" for empty cells before that.
+  function toRows(valueRanges) {
+    const cols = valueRanges.map(r => (r.values && r.values[0]) || []);
+    const len = Math.max(0, ...cols.map(c => c.length));
+    const rows = new Array(len);
+    for (let i = 0; i < len; i++) rows[i] = cols.map(c => (c[i] === undefined || c[i] === '' ? null : c[i]));
+    return rows;
+  }
+
+  // Reads the Collection sheet, and the Driver Payouts sheet when there is one. Only the columns the
+  // dashboard uses are downloaded.
   async function readSheet(id, accessToken) {
     const base = encodeURIComponent(id);
     const meta = await api(base, [['fields', 'properties.title,sheets.properties.title']], accessToken);
     const title = meta.properties.title;
     const names = meta.sheets.map(s => s.properties.title);
-    const sheet = CN.data.findSheet(names, `The "${title}" spreadsheet`);
+    const what = `The "${title}" spreadsheet`;
+    const payoutSheet = CN.data.findPayoutSheet(names);
+    const tabs = [{ sheet: CN.data.findSheet(names, what), columns: CN.data.pickupColumns }];
+    if (payoutSheet) tabs.push({ sheet: payoutSheet, columns: CN.data.payoutColumns });
 
-    // The header is the first row with anything in it.
-    const top = await api(`${base}/values/${encodeURIComponent(quote(sheet) + '!1:20')}`, RAW, accessToken);
-    const head = top.values || [];
-    const h = head.findIndex(r => r.some(v => v !== ''));
-    if (h < 0) throw new DataError(`The "${sheet}" sheet has nothing in its first 20 rows.`);
-    const col = CN.data.pickupColumns(head[h], sheet);
-
-    const ranges = Object.values(col).map(c => ['ranges', `${quote(sheet)}!${columnLetters(c)}${h + 1}:${columnLetters(c)}`]);
+    // Each sheet's header is its first row with anything in it.
+    const tops = await api(`${base}/values:batchGet`, [...tabs.map(t => ['ranges', quote(t.sheet) + '!1:20']), ...RAW], accessToken);
+    const ranges = [];
+    for (const [i, t] of tabs.entries()) {
+      const head = tops.valueRanges[i].values || [];
+      t.h = head.findIndex(r => r.some(v => v !== ''));
+      try {
+        if (t.h < 0) throw new DataError(`The "${t.sheet}" sheet has nothing in its first 20 rows.`);
+        t.cols = Object.values(t.columns(head[t.h], t.sheet)).map(c => columnLetters(c));
+      } catch (err) {
+        if (i === 0 || !(err instanceof DataError)) throw err;
+        t.problem = err; // the Drivers page says why it has no payouts
+        continue;
+      }
+      t.first = ranges.length;
+      for (const c of t.cols) ranges.push(['ranges', `${quote(t.sheet)}!${c}${t.h + 1}:${c}`]);
+    }
     const data = await api(`${base}/values:batchGet`, [...ranges, ['majorDimension', 'COLUMNS'], ...RAW], accessToken);
-    // Google leaves out empty cells at the end of a column and sends "" for empty cells before that.
-    const cols = data.valueRanges.map(r => (r.values && r.values[0]) || []);
-    const len = Math.max(...cols.map(c => c.length));
-    const rows = new Array(len);
-    for (let i = 0; i < len; i++) rows[i] = cols.map(c => (c[i] === undefined || c[i] === '' ? null : c[i]));
-    return { name: title, source: 'google', sheets: names, pickups: CN.data.readPickups(rows, h, sheet, 0) };
+    const rowsOf = t => toRows(data.valueRanges.slice(t.first, t.first + t.cols.length));
+    const [c, p] = tabs;
+    const loaded = { name: title, source: 'google', sheets: names, pickups: CN.data.readPickups(rowsOf(c), c.h, c.sheet, 0) };
+    return Object.assign(loaded, CN.data.optionalPayouts(payoutSheet, () => {
+      if (p.problem) throw p.problem;
+      return CN.data.readPayouts(rowsOf(p), p.h, p.sheet, 0);
+    }, what));
   }
 
   const wait = ms => new Promise(resolve => setTimeout(resolve, ms));

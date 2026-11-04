@@ -34,8 +34,15 @@
     return numFmt.format(n);
   }
 
+  // A CSV cell; a leading = + - @ gets a quote mark so Excel won't run it as a formula.
+  function csv(v) {
+    let t = String(v);
+    if (/^[=+\-@\t\r]/.test(t)) t = "'" + t;
+    return /[",\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+  }
+
   CN.fmt = {
-    EPOCH, toDate, fromYmd, fromIso, iso, short,
+    EPOCH, toDate, fromYmd, fromIso, iso, short, csv,
     int: n => intFmt.format(n),
     num: n => numFmt.format(n),
     money: n => moneyFmt.format(n),

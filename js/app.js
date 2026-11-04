@@ -4,8 +4,11 @@
   'use strict';
   const F = CN.fmt;
   const $ = id => document.getElementById(id);
-  const VIEWS = ['welcome', 'pickups', 'details'];
-  let book = null; // { name, source: 'google' | 'file', sheets, pickups, loadedAt }
+  const VIEWS = ['welcome', 'pickups', 'details', 'drivers', 'drv-details'];
+  // menu item of each view
+  const NAV = { pickups: 'nav-pickups', details: 'nav-pickups', drivers: 'nav-drivers', 'drv-details': 'nav-drivers' };
+  // { name, source: 'google' | 'file', sheets, pickups, payouts (or null), payoutsProblem, loadedAt }
+  let book = null;
 
   const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
   const esc = s => String(s).replace(/[&<>"']/g, c => ESC[c]);
@@ -13,22 +16,32 @@
   function showView(name) {
     VIEWS.forEach(v => { $('view-' + v).hidden = v !== name; });
     document.body.dataset.view = name;
-    const nav = $('nav-pickups');
-    nav.classList.toggle('active', name !== 'welcome');
-    if (name === 'welcome') nav.removeAttribute('aria-current');
-    else nav.setAttribute('aria-current', 'page');
+    for (const id of new Set(Object.values(NAV))) {
+      const on = NAV[name] === id;
+      $(id).classList.toggle('active', on);
+      if (on) $(id).setAttribute('aria-current', 'page');
+      else $(id).removeAttribute('aria-current');
+    }
   }
 
-  // #/pickups?... or #/pickups/details?...; the query holds the page's filters.
+  // #/pickups?..., #/pickups/details?..., #/drivers?... or #/drivers/details?...; the query holds the
+  // page's filters.
   function route() {
     if (!book) {
       showView('welcome');
       return;
     }
     const [path, query] = location.hash.replace(/^#\/?/, '').split('?');
+    const params = new URLSearchParams(query || '');
+    if (path === 'drivers' || path === 'drivers/details') {
+      const details = path === 'drivers/details';
+      showView(details ? 'drv-details' : 'drivers');
+      CN.drivers.show(params, details ? 'details' : 'drivers');
+      return;
+    }
     const view = path === 'pickups/details' ? 'details' : 'pickups';
     showView(view);
-    CN.pickups.show(view, new URLSearchParams(query || ''));
+    CN.pickups.show(view, params);
   }
 
   function busy(text) {
@@ -59,9 +72,10 @@
   function useBook(loaded) {
     book = Object.assign(loaded, { loadedAt: new Date() });
     CN.pickups.load(book.pickups);
+    CN.drivers.load(book);
     clearErrors();
     renderStatus();
-    if (!/^#\/pickups/.test(location.hash)) history.replaceState(null, '', '#/pickups');
+    if (!/^#\/(pickups|drivers)/.test(location.hash)) history.replaceState(null, '', '#/pickups');
     route();
   }
 
@@ -122,14 +136,15 @@
   }
 
   function renderStatus() {
-    const p = book.pickups, google = book.source === 'google';
+    const p = book.pickups, q = book.payouts, google = book.source === 'google';
     $('status-file').textContent = [
       google ? `${book.name} (Google Sheets)` : book.name,
       `${F.int(p.n)} pick-up lines`,
+      q ? `${F.int(q.n)} payout lines` : '',
       `${F.dayLong(p.minDay)} – ${F.dayLong(p.maxDay)}`,
       google ? `loaded ${F.clock(book.loadedAt)}` : '',
     ].filter(Boolean).join(' · ');
-    const count = noteCount(p.notes);
+    const count = noteCount(p.notes) + (q ? noteCount(q.notes) : 1);
     $('status-notes').textContent = count ? `Data notes (${count})` : 'Data notes';
     for (const id of ['status-refresh', 'status-choose', 'status-signout']) $(id).hidden = !google;
     if (CN.google.fixedSheet) $('status-choose').hidden = true; // js/config.js names the sheet
@@ -173,9 +188,30 @@
         n.badAmounts.slice(0, 8).map(x => `row ${x.row} ("${esc(x.value)}")`).join(', ') + (n.badAmounts.length > 8 ? ', …' : '') + '</li>');
     }
     if (n.noAmount) items.push(`<li>${F.int(n.noAmount)} row${n.noAmount > 1 ? 's have' : ' has'} no amount and count${n.noAmount > 1 ? '' : 's'} as $0.</li>`);
+    items.push(payoutNotes());
     items.push('<li>Names that differ only in capital letters or extra spaces count as one, as in Power BI ' +
       '(for example "PAUL" and "Paul"). Each is shown with the spelling that appears first in the sheet.</li>');
     $('notes-list').innerHTML = items.join('');
+  }
+
+  // The Driver Payouts sheet's notes, in one item.
+  function payoutNotes() {
+    const q = book.payouts;
+    if (!q) return `<li><b>Driver Payouts:</b> ${esc(book.payoutsProblem)} The Drivers page shows no payouts.</li>`;
+    const n = q.notes, parts = [];
+    const rows = list => list.slice(0, 8).map(x => `row ${x.row} ("${esc(x.value)}")`).join(', ') + (list.length > 8 ? ', …' : '');
+    const s = (k, one, many) => `${F.int(k)} ${k === 1 ? one : many}`;
+    if (n.commaDecimals.length) {
+      const extra = n.commaDecimals.reduce((t, x) => t + x.powerBi - x.amount, 0);
+      parts.push(`${s(n.commaDecimals.length, 'amount was', 'amounts were')} typed with a comma as the decimal mark ` +
+        `and ${n.commaDecimals.length === 1 ? 'is' : 'are'} read as written, which puts Power BI's total ${F.money(extra)} higher: ` +
+        rows(n.commaDecimals.map(x => ({ row: x.row, value: x.value }))));
+    }
+    if (n.badAmounts.length) parts.push(`${s(n.badAmounts.length, "amount isn't a number", "amounts aren't numbers")} and count as $0: ${rows(n.badAmounts)}`);
+    if (n.noAmount) parts.push(`${s(n.noAmount, 'row has', 'rows have')} no amount and count as $0`);
+    if (n.badDates.length) parts.push(`${s(n.badDates.length, 'row has a date that', 'rows have a date that')} can't be read and ${n.badDates.length === 1 ? 'is' : 'are'} left out: ${rows(n.badDates)}`);
+    if (n.noDate) parts.push(`${s(n.noDate, 'row has', 'rows have')} no date and ${n.noDate === 1 ? 'is' : 'are'} left out`);
+    return parts.length ? `<li><b>Driver Payouts:</b> ${parts.join('; ')}.</li>` : '';
   }
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -188,6 +224,7 @@
       return;
     }
     CN.pickups.init();
+    CN.drivers.init();
     setUpStart();
     const pick = () => $('file-input').click();
     for (const id of ['open-file', 'open-file-alt', 'status-open']) $(id).addEventListener('click', pick);

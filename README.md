@@ -3,8 +3,8 @@
 A web version of the *Cash Now Test Strips – Executive Report* (Power BI). It runs entirely in the
 browser, so it can be hosted for free on GitHub Pages with no server.
 
-So far it has the **Pick Ups** page and its **Pick Up Detail** drill-through. The other pages are listed
-in the menu and come next.
+So far it has the **Pick Ups** page with its **Pick Up Detail** drill-through, and the **Drivers** page.
+The other pages are listed in the menu and come next.
 
 ## Your data stays out of this repository
 
@@ -43,6 +43,13 @@ The page works like the Power BI one:
 - **Details** lists the pick-ups behind the current view. Without a selected point it lists the whole
   date range. The table sorts by any column and downloads as CSV.
 - The address bar keeps the filters, so a bookmark reopens the same view.
+
+The **Drivers** page has its own date range, with the same choices. It shows the cash each driver
+handed out, the total paid to drivers, and those payouts by driver, by category (Schedule, Commission,
+Bonus, Shipping) and by type of bonus. Clicking a driver, a category or a type of bonus filters the
+payout charts to it, as in Power BI. Click it again, press Esc or use **Clear** to undo. **Details**
+lists the payout lines behind the total, for the date range and anything selected. The table sorts by
+any column and downloads as CSV.
 
 ## Setting up Google sign-in
 
@@ -97,8 +104,10 @@ address.
 
 The page reads the **Collection** sheet, using these columns: `Collection_Date`, `Collection_Order_No`,
 `First_Name`, `City`, `State`, `Assign_to`, `Product_Code`, `Quantity` and `Comments` (`Comments`
-holds the dollars paid). From Google Sheets it downloads only those columns. If a column is renamed,
-the page names the missing one.
+holds the dollars paid). The Drivers page also reads the **Driver Payouts** sheet: `Date`,
+`Driver name`, `Payment Amount`, `Concept` and `Notes`. Without that sheet, the other pages still work.
+From Google Sheets the dashboard downloads only those columns. If a column is renamed, the page names
+the missing one.
 
 | Measure | Definition |
 |---|---|
@@ -106,6 +115,7 @@ the page names the missing one.
 | Total Pick ups | Count of distinct `Collection_Order_No` (the order number in Power BI's Pick Up Detail table) |
 | Avrg Pick up | Cash spent ÷ pick-ups |
 | Top Product / Driver / Vendor | Highest cash spent in the current view |
+| Total Driver Payouts | Sum of `Payment Amount` on the Driver Payouts sheet |
 
 Cleaning rules:
 
@@ -118,8 +128,8 @@ Cleaning rules:
 
 ## Next steps
 
-- The remaining pages: Drivers, Insights, Mail Order, Electronics, Vendors & Products, Demographics,
-  Cancelled, Call Report and Mail Details.
+- The remaining pages: Insights, Mail Order, Electronics, Vendors & Products, Demographics, Cancelled,
+  Call Report and Mail Details.
 
 ## Built with
 

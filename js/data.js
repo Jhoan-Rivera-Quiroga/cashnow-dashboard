@@ -1,5 +1,5 @@
-/* Turns the Collection table into clean columns, from a workbook file (read with SheetJS)
-   or from rows that js/google.js reads from Google Sheets. */
+/* Turns the Collection and Driver Payouts tables into clean columns, from a workbook file (read
+   with SheetJS) or from rows that js/google.js reads from Google Sheets. */
 (function (CN) {
   'use strict';
   const F = CN.fmt;
@@ -21,6 +21,17 @@
     amount: 'Comments', // holds the dollars paid on the line
   };
   const TEXT_FIELDS = ['order', 'vendor', 'city', 'state', 'driver', 'product'];
+
+  // Columns the Drivers page reads. The sheet repeats some of these names in a block beside the
+  // table; the first column with each name is the one read.
+  const PAYOUT_COLUMNS = {
+    date: 'Date',
+    driver: 'Driver name',
+    amount: 'Payment Amount',
+    concept: 'Concept', // Schedule, Commission, Bonus or Shipping
+    note: 'Notes', // the kind of bonus, on Bonus lines
+  };
+  const PAYOUT_TEXT = ['driver', 'concept', 'note'];
 
   const key = s => String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -61,6 +72,32 @@
     return t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d ? s : null;
   }
 
+  const newNotes = () => ({ commaDecimals: [], badDates: [], noDate: 0, badAmounts: [], noAmount: 0 });
+
+  // A row's date as a serial day, or -1 when it's missing or can't be read (listed in Data notes).
+  function readDate(raw, offset, notes, row) {
+    const d = toDay(raw, offset);
+    if (d !== null) return d;
+    if (cleanText(raw) === null) notes.noDate++;
+    else notes.badDates.push({ row, value: String(raw) });
+    return -1;
+  }
+
+  // A row's amount, or 0 when it's missing or isn't a number. Data notes lists those, and the
+  // comma decimals that Power BI reads differently.
+  function readAmount(raw, day, notes, row) {
+    const a = toNumber(raw);
+    if (Number.isNaN(a)) {
+      if (cleanText(raw) === null) notes.noAmount++;
+      else notes.badAmounts.push({ row, value: String(raw) });
+      return 0;
+    }
+    if (typeof raw === 'string' && /^\$?\s*-?\d+,\d{1,2}$/.test(raw.trim())) {
+      notes.commaDecimals.push({ row, day, value: raw.trim(), amount: a, powerBi: Number(raw.replace(/[$\s,]/g, '')) });
+    }
+    return a;
+  }
+
   // Groups text ignoring case and labels each group with the spelling that appears first
   // in the sheet, as Power BI does ("PAUL" and "Paul" are one vendor, shown as "PAUL").
   class Dict {
@@ -88,10 +125,13 @@
     return sheet;
   }
 
-  // Position of each Pick Ups column in the header row.
-  function pickupColumns(header, sheet) {
+  // The sheet the Drivers page reads, or null when there is none.
+  const findPayoutSheet = names => names.find(n => key(n) === 'driverpayouts') || null;
+
+  // Position of each wanted column in the header row.
+  function findColumns(wanted, header, sheet) {
     const col = {}, missing = [];
-    for (const [field, name] of Object.entries(PICKUP_COLUMNS)) {
+    for (const [field, name] of Object.entries(wanted)) {
       col[field] = header.findIndex(v => key(v) === key(name));
       if (col[field] < 0) missing.push(name);
     }
@@ -101,20 +141,46 @@
     }
     return col;
   }
+  const pickupColumns = (header, sheet) => findColumns(PICKUP_COLUMNS, header, sheet);
+  const payoutColumns = (header, sheet) => findColumns(PAYOUT_COLUMNS, header, sheet);
+
+  // Only the Drivers page needs the payouts, so a missing or unreadable Driver Payouts sheet leaves
+  // the other pages working and the Drivers page says why it has no payouts.
+  function optionalPayouts(sheet, read, what) {
+    if (!sheet) return { payouts: null, payoutsProblem: `${what} has no "Driver Payouts" sheet.` };
+    try {
+      return { payouts: read(), payoutsProblem: null };
+    } catch (err) {
+      if (!(err instanceof DataError)) throw err;
+      return { payouts: null, payoutsProblem: err.message };
+    }
+  }
+
+  // A SheetJS sheet as one array of raw values per row, and the sheet row of the first one.
+  function sheetRows(ws, sheet) {
+    if (!ws || !ws['!ref']) throw new DataError(`The "${sheet}" sheet is empty.`);
+    return {
+      rows: XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null, blankrows: true }),
+      firstRow: XLSX.utils.decode_range(ws['!ref']).s.r,
+    };
+  }
 
   function readWorkbook(buffer, fileName) {
     const bytes = new Uint8Array(buffer);
     const names = XLSX.read(bytes, { type: 'array', bookSheets: true }).SheetNames;
     const sheet = findSheet(names, 'This workbook');
-    const wb = XLSX.read(bytes, { type: 'array', sheets: [sheet], dense: true, cellText: false, cellHTML: false });
-    const ws = wb.Sheets[sheet];
-    if (!ws || !ws['!ref']) throw new DataError(`The "${sheet}" sheet is empty.`);
-    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null, blankrows: true });
+    const payoutSheet = findPayoutSheet(names);
+    const wb = XLSX.read(bytes, {
+      type: 'array', sheets: payoutSheet ? [sheet, payoutSheet] : [sheet], dense: true, cellText: false, cellHTML: false,
+    });
     const props = wb.Workbook && wb.Workbook.WBProps;
-    return {
-      name: fileName, source: 'file', sheets: names,
-      pickups: readPickups(rows, XLSX.utils.decode_range(ws['!ref']).s.r, sheet, props && props.date1904 ? 1462 : 0),
-    };
+    const offset = props && props.date1904 ? 1462 : 0;
+    const c = sheetRows(wb.Sheets[sheet], sheet);
+    const loaded = { name: fileName, source: 'file', sheets: names, pickups: readPickups(c.rows, c.firstRow, sheet, offset) };
+    return Object.assign(loaded, optionalPayouts(payoutSheet, () => {
+      const p = sheetRows(wb.Sheets[payoutSheet], payoutSheet);
+      return readPayouts(p.rows, p.firstRow, payoutSheet, offset);
+    }, 'This workbook'));
   }
 
   // rows: one array of raw cell values per sheet row (numbers, dates as serial numbers, text,
@@ -128,39 +194,21 @@
     const day = new Int32Array(cap), amount = new Float64Array(cap), units = new Float64Array(cap);
     const dicts = {}, codes = {};
     TEXT_FIELDS.forEach(f => { dicts[f] = new Dict(); codes[f] = new Int32Array(cap); });
-    const notes = { commaDecimals: [], badDates: [], noDate: 0, badAmounts: [], noAmount: 0 };
+    const notes = newNotes();
     let n = 0, minDay = Infinity, maxDay = -Infinity;
 
     for (let j = h + 1; j < rows.length; j++) {
       const row = rows[j];
       if (!row.some(v => v != null)) continue;
       const excelRow = firstRow + j + 1;
-
-      const rawDate = row[col.date];
-      const d = toDay(rawDate, dateOffset);
-      if (d === null) {
-        if (cleanText(rawDate) === null) notes.noDate++;
-        else notes.badDates.push({ row: excelRow, value: String(rawDate) });
-      } else {
+      const d = readDate(row[col.date], dateOffset, notes, excelRow);
+      if (d >= 0) {
         if (d < minDay) minDay = d;
         if (d > maxDay) maxDay = d;
       }
-      day[n] = d === null ? -1 : d;
-
+      day[n] = d;
       for (const f of TEXT_FIELDS) codes[f][n] = dicts[f].code(cleanText(row[col[f]]));
-
-      const rawAmount = row[col.amount];
-      const a = toNumber(rawAmount);
-      if (Number.isNaN(a)) {
-        if (cleanText(rawAmount) === null) notes.noAmount++;
-        else notes.badAmounts.push({ row: excelRow, value: String(rawAmount) });
-      } else if (typeof rawAmount === 'string' && /^\$?\s*-?\d+,\d{1,2}$/.test(rawAmount.trim())) {
-        notes.commaDecimals.push({
-          row: excelRow, day: d, value: rawAmount.trim(), amount: a,
-          powerBi: Number(rawAmount.replace(/[$\s,]/g, '')),
-        });
-      }
-      amount[n] = Number.isNaN(a) ? 0 : a;
+      amount[n] = readAmount(row[col.amount], d, notes, excelRow);
       const u = toNumber(row[col.units]);
       units[n] = Number.isNaN(u) ? 0 : u;
       n++;
@@ -190,5 +238,49 @@
     return out;
   }
 
-  CN.data = { readWorkbook, readPickups, findSheet, pickupColumns, toNumber, toDay, DataError };
+  // The Driver Payouts sheet, one row per payment to a driver; rows as for readPickups.
+  function readPayouts(rows, firstRow, sheet, dateOffset) {
+    const h = rows.findIndex(r => r.some(v => v != null));
+    if (h < 0) throw new DataError(`The "${sheet}" sheet is empty.`);
+    const col = payoutColumns(rows[h], sheet);
+    const used = Object.values(col);
+
+    const cap = rows.length - h - 1;
+    const day = new Int32Array(cap), amount = new Float64Array(cap);
+    const dicts = {}, codes = {};
+    PAYOUT_TEXT.forEach(f => { dicts[f] = new Dict(); codes[f] = new Int32Array(cap); });
+    const notes = newNotes();
+    let n = 0, minDay = Infinity, maxDay = -Infinity;
+
+    for (let j = h + 1; j < rows.length; j++) {
+      const row = rows[j];
+      if (!used.some(c => row[c] != null)) continue; // only the table's own columns count
+      const excelRow = firstRow + j + 1;
+      const d = readDate(row[col.date], dateOffset, notes, excelRow);
+      if (d >= 0) {
+        if (d < minDay) minDay = d;
+        if (d > maxDay) maxDay = d;
+      }
+      day[n] = d;
+      for (const f of PAYOUT_TEXT) codes[f][n] = dicts[f].code(cleanText(row[col[f]]));
+      amount[n] = readAmount(row[col.amount], d, notes, excelRow);
+      n++;
+    }
+
+    const dated = Number.isFinite(minDay);
+    const out = {
+      sheet, n, notes, minDay: dated ? minDay : null, maxDay: dated ? maxDay : null,
+      day: day.subarray(0, n), amount: amount.subarray(0, n), labels: {},
+    };
+    for (const f of PAYOUT_TEXT) {
+      out[f] = codes[f].subarray(0, n);
+      out.labels[f] = dicts[f].labels();
+    }
+    return out;
+  }
+
+  CN.data = {
+    readWorkbook, readPickups, readPayouts, findSheet, findPayoutSheet, pickupColumns, payoutColumns,
+    optionalPayouts, toNumber, toDay, DataError,
+  };
 })(window.CashNow = window.CashNow || {});

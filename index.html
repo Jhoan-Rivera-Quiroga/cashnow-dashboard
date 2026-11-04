@@ -17,7 +17,9 @@
 <script defer src="js/data.js"></script>
 <script defer src="js/config.js"></script>
 <script defer src="js/google.js"></script>
+<script defer src="js/ranges.js"></script>
 <script defer src="js/pickups.js"></script>
+<script defer src="js/drivers.js"></script>
 <script defer src="js/app.js"></script>
 </head>
 <body data-view="welcome">
@@ -29,7 +31,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 15.5V9.5h9V7h4.2l3.3 4.2 2.5.8v3.5"/><circle cx="6.5" cy="16.5" r="1.8"/><circle cx="17" cy="16.5" r="1.8"/></svg>
         <span>Pick Ups</span>
       </a>
-      <a class="nav-item" aria-disabled="true" title="Coming soon">
+      <a class="nav-item" id="nav-drivers" href="#/drivers">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 15.5V9.5h9V7h4.2l3.3 4.2 2.5.8v3.5"/><circle cx="6.5" cy="16.5" r="1.8"/><circle cx="17" cy="16.5" r="1.8"/></svg>
         <span>Drivers</span>
       </a>
@@ -144,6 +146,80 @@
         <h2>Pick Up's by Date</h2>
         <div class="chart" id="chart-pickups" role="img" aria-label="Pick-ups by date. Click a point to filter the page."></div>
       </section>
+    </section>
+
+    <section class="view" id="view-drivers" hidden>
+      <header class="toolbar">
+        <img class="logo" src="assets/cashmoney-logo.png" alt="Cash Money Test Strips" width="216" height="62">
+        <div class="field">
+          <span class="field-label">Date</span>
+          <div class="date-range">
+            <input class="control" type="date" id="drv-from" aria-label="From">
+            <span aria-hidden="true">–</span>
+            <input class="control" type="date" id="drv-to" aria-label="To">
+          </div>
+        </div>
+        <div class="field">
+          <label class="field-label" for="drv-preset">Range</label>
+          <select class="control" id="drv-preset"></select>
+        </div>
+        <div class="kpi kpi-inline"><div class="kpi-value" id="drv-total">–</div><div class="kpi-label">Total Driver Payouts</div></div>
+        <button type="button" class="details-btn details-inline" id="drv-details-btn">Details</button>
+      </header>
+      <div class="selection selection-row" id="drv-selection" hidden>
+        <span>Showing <b id="drv-selection-label"></b></span>
+        <button type="button" id="drv-clear">Clear</button>
+      </div>
+      <p class="drv-problem" id="drv-problem" role="status" hidden></p>
+      <div class="drv-grid">
+        <section class="chart-card">
+          <h2>Cash Spent by Driver</h2>
+          <div class="chart-scroll"><div class="chart" id="chart-drv-cash" role="img" aria-label="Cash each driver handed out, largest first. Click a driver to see their payouts."></div></div>
+        </section>
+        <section class="chart-card" id="drv-card-concept">
+          <h2>Driver Payout by Category</h2>
+          <div class="chart chart-pie" id="chart-drv-concept" role="img" aria-label="Driver payouts by category. Click a category to filter the other payout charts."></div>
+        </section>
+        <section class="chart-card" id="drv-card-payouts">
+          <h2>Driver Payouts</h2>
+          <div class="chart-scroll"><div class="chart" id="chart-drv-payouts" role="img" aria-label="Payouts to each driver, largest first. Click a driver to filter the other payout charts."></div></div>
+        </section>
+        <section class="chart-card" id="drv-card-bonus">
+          <h2>Type of Bonuses</h2>
+          <div class="chart chart-pie" id="chart-drv-bonus" role="img" aria-label="Bonus payouts by type. Click a type to filter the other payout charts."></div>
+        </section>
+      </div>
+    </section>
+
+    <section class="view details" id="view-drv-details" hidden>
+      <div class="details-head">
+        <a class="back" id="drv-details-back" href="#/drivers" aria-label="Back to Drivers">
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="24" cy="24" r="22"/><path d="M36 24H12m9-9-9 9 9 9"/></svg>
+        </a>
+        <div class="details-title">
+          <h1>Driver Payout Detail</h1>
+          <p id="drv-details-context"></p>
+        </div>
+        <button type="button" class="btn" id="drv-details-export">Download CSV</button>
+      </div>
+      <div class="table-wrap">
+        <table class="detail-table" id="drv-details-table">
+          <thead>
+            <tr>
+              <th data-sort="day" aria-sort="ascending"><button type="button">Date</button></th>
+              <th data-sort="driver" aria-sort="none"><button type="button">Driver name</button></th>
+              <th data-sort="concept" aria-sort="none"><button type="button">Concept</button></th>
+              <th data-sort="note" aria-sort="none"><button type="button">Notes</button></th>
+              <th data-sort="amount" aria-sort="none" class="num"><button type="button">Payment Amount</button></th>
+            </tr>
+          </thead>
+          <tbody id="drv-details-body"></tbody>
+          <tfoot>
+            <tr><td colspan="4">Total</td><td class="num" id="drv-details-total"></td></tr>
+          </tfoot>
+        </table>
+      </div>
+      <button type="button" class="btn more" id="drv-details-more" hidden></button>
     </section>
 
     <section class="view details" id="view-details" hidden>
