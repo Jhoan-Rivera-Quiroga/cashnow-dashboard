@@ -19,9 +19,11 @@
 <script defer src="js/google.js"></script>
 <script defer src="js/ranges.js"></script>
 <script defer src="js/charts.js"></script>
+<script defer src="js/table.js"></script>
 <script defer src="js/pickups.js"></script>
 <script defer src="js/drivers.js"></script>
 <script defer src="js/insights.js"></script>
+<script defer src="js/mail.js"></script>
 <script defer src="js/app.js"></script>
 </head>
 <body data-view="welcome">
@@ -41,7 +43,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 15.5V9.5h9V7h4.2l3.3 4.2 2.5.8v3.5"/><circle cx="6.5" cy="16.5" r="1.8"/><circle cx="17" cy="16.5" r="1.8"/></svg>
         <span>Insights</span>
       </a>
-      <a class="nav-item" aria-disabled="true" title="Coming soon">
+      <a class="nav-item" id="nav-mail" href="#/mail">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="1.5"/><path d="m3.5 6.5 8.5 6.5 8.5-6.5"/></svg>
         <span>Mail Order</span>
       </a>
@@ -234,6 +236,69 @@
       </div>
     </section>
 
+    <section class="view" id="view-mail" hidden>
+      <header class="toolbar">
+        <img class="logo" src="assets/cashmoney-logo.png" alt="Cash Money Test Strips" width="216" height="62">
+        <div class="field">
+          <span class="field-label">Date</span>
+          <div class="date-range">
+            <input class="control" type="date" id="mail-from" aria-label="From">
+            <span aria-hidden="true">–</span>
+            <input class="control" type="date" id="mail-to" aria-label="To">
+          </div>
+        </div>
+        <div class="field">
+          <label class="field-label" for="mail-preset">Range</label>
+          <select class="control" id="mail-preset"></select>
+        </div>
+        <div class="field">
+          <label class="field-label" for="mail-granularity">Dynamic Date</label>
+          <select class="control" id="mail-granularity">
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+        </div>
+        <img class="logo logo-right" src="assets/cashmoney-logo.png" alt="" width="216" height="62">
+      </header>
+      <p class="drv-problem" id="mail-problem" role="status" hidden></p>
+      <div class="view-body" id="mail-content">
+        <div class="kpis kpis-3" id="mail-kpis">
+          <div class="kpi"><div class="kpi-value" id="mail-kpi-vendor">–</div><div class="kpi-label">Top Mail Vendor<span class="kpi-amt" id="mail-kpi-vendor-amt"></span></div></div>
+          <div class="kpi"><div class="kpi-value" id="mail-kpi-orders">–</div><div class="kpi-label">Total Orders Completed</div></div>
+          <div class="kpi"><div class="kpi-value" id="mail-kpi-cash">–</div><div class="kpi-label">Total Cash Spent</div></div>
+          <button type="button" class="details-btn" id="mail-details-btn">Details</button>
+        </div>
+        <section class="chart-card">
+          <h2>Total By Cash Spent</h2>
+          <div class="selection" id="mail-selection" hidden>
+            <span>Showing <b id="mail-selection-label"></b></span>
+            <button type="button" id="mail-clear">Clear</button>
+          </div>
+          <div class="chart" id="chart-mail-cash" role="img" aria-label="Mail order cash spent by date. Click a point to filter the page."></div>
+        </section>
+        <section class="chart-card">
+          <h2>Total By Orders Completed</h2>
+          <div class="chart" id="chart-mail-orders" role="img" aria-label="Mail orders completed by date. Click a point to filter the page."></div>
+        </section>
+      </div>
+    </section>
+
+    <section class="view details" id="view-mail-details" hidden>
+      <div class="details-head">
+        <a class="back" id="mail-details-back" href="#/mail" aria-label="Back to Mail Order">
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="24" cy="24" r="22"/><path d="M36 24H12m9-9-9 9 9 9"/></svg>
+        </a>
+        <div class="details-title">
+          <h1>Mail Details</h1>
+          <p id="mail-details-context"></p>
+        </div>
+        <button type="button" class="btn" id="mail-details-export">Download CSV</button>
+      </div>
+      <div class="table-wrap"><table class="detail-table" id="mail-details-table"></table></div>
+      <button type="button" class="btn more" id="mail-details-more" hidden></button>
+    </section>
+
     <section class="view details" id="view-drv-details" hidden>
       <div class="details-head">
         <a class="back" id="drv-details-back" href="#/drivers" aria-label="Back to Drivers">
@@ -245,23 +310,7 @@
         </div>
         <button type="button" class="btn" id="drv-details-export">Download CSV</button>
       </div>
-      <div class="table-wrap">
-        <table class="detail-table" id="drv-details-table">
-          <thead>
-            <tr>
-              <th data-sort="day" aria-sort="ascending"><button type="button">Date</button></th>
-              <th data-sort="driver" aria-sort="none"><button type="button">Driver name</button></th>
-              <th data-sort="concept" aria-sort="none"><button type="button">Concept</button></th>
-              <th data-sort="note" aria-sort="none"><button type="button">Notes</button></th>
-              <th data-sort="amount" aria-sort="none" class="num"><button type="button">Payment Amount</button></th>
-            </tr>
-          </thead>
-          <tbody id="drv-details-body"></tbody>
-          <tfoot>
-            <tr><td colspan="4">Total</td><td class="num" id="drv-details-total"></td></tr>
-          </tfoot>
-        </table>
-      </div>
+      <div class="table-wrap"><table class="detail-table" id="drv-details-table"></table></div>
       <button type="button" class="btn more" id="drv-details-more" hidden></button>
     </section>
 
@@ -276,25 +325,7 @@
         </div>
         <button type="button" class="btn" id="details-export">Download CSV</button>
       </div>
-      <div class="table-wrap">
-        <table class="detail-table" id="details-table">
-          <thead>
-            <tr>
-              <th data-sort="day" aria-sort="ascending"><button type="button">Date</button></th>
-              <th data-sort="order" aria-sort="none"><button type="button">Order Number</button></th>
-              <th data-sort="vendor" aria-sort="none"><button type="button">First_Name</button></th>
-              <th data-sort="city" aria-sort="none"><button type="button">City</button></th>
-              <th data-sort="product" aria-sort="none"><button type="button">Product_Code</button></th>
-              <th data-sort="units" aria-sort="none" class="num"><button type="button">Quantity</button></th>
-              <th data-sort="cash" aria-sort="none" class="num"><button type="button">Cash Spent</button></th>
-            </tr>
-          </thead>
-          <tbody id="details-body"></tbody>
-          <tfoot>
-            <tr><td colspan="5">Total</td><td class="num" id="details-units"></td><td class="num" id="details-cash"></td></tr>
-          </tfoot>
-        </table>
-      </div>
+      <div class="table-wrap"><table class="detail-table" id="details-table"></table></div>
       <button type="button" class="btn more" id="details-more" hidden></button>
     </section>
 

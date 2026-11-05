@@ -1,8 +1,15 @@
-/* The Range choices the report pages share. Ranges count back from the latest date in the data,
-   so a new file opens on its recent months. */
+/* The Range and Dynamic Date choices the report pages share. Ranges count back from the latest date
+   in the data, so a new file opens on its recent months. */
 (function (CN) {
   'use strict';
   const F = CN.fmt;
+
+  // Dynamic Date: how each kind of date bucket is shown on an axis and named in a sentence.
+  const GRAN = {
+    daily: { name: 'Daily', label: F.dayShort, phrase: F.dayLong },
+    weekly: { name: 'Weekly', label: F.dayShort, phrase: s => 'Week of ' + F.dayLong(s) },
+    monthly: { name: 'Monthly', label: F.month, phrase: F.monthLong },
+  };
 
   const PRESETS = {
     month: { name: 'Latest month', months: 1 },
@@ -25,5 +32,5 @@
     return [Math.max(from, minDay), maxDay];
   }
 
-  CN.ranges = { PRESETS, range };
+  CN.ranges = { PRESETS, GRAN, range };
 })(window.CashNow = window.CashNow || {});

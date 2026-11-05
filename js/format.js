@@ -26,11 +26,14 @@
     return iso(s) === text ? s : null;
   }
 
-  // Power BI's display units: 109966 -> "110.0K", 2919612 -> "2.92M".
+  // toFixed that rounds halves up: 1.035 is stored as 1.03499…, which toFixed(2) makes "1.03".
+  const fixed = (x, digits) => (Math.round((x + Math.sign(x) * Number.EPSILON) * 10 ** digits) / 10 ** digits).toFixed(digits);
+
+  // Power BI's display units: 5922 -> "5.92K", 109966 -> "110.0K", 2919612 -> "2.92M".
   function short(n) {
     const a = Math.abs(n);
-    if (a >= 1e6) return (n / 1e6).toFixed(2) + 'M';
-    if (a >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+    if (a >= 1e6) return fixed(n / 1e6, 2) + 'M';
+    if (a >= 1e3) return fixed(n / 1e3, a < 1e4 ? 2 : 1) + 'K';
     return numFmt.format(n);
   }
 

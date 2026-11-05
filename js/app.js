@@ -4,8 +4,8 @@
   'use strict';
   const F = CN.fmt;
   const $ = id => document.getElementById(id);
-  const SECTIONS = ['welcome', 'pickups', 'details', 'drivers', 'drv-details', 'insights']; // #view-…
-  const MENU = ['nav-pickups', 'nav-drivers', 'nav-insights'];
+  const SECTIONS = ['welcome', 'pickups', 'details', 'drivers', 'drv-details', 'insights', 'mail', 'mail-details']; // #view-…
+  const MENU = ['nav-pickups', 'nav-drivers', 'nav-insights', 'nav-mail'];
   // Each address path: the section it shows, its menu item, and the page module that fills it.
   const PATHS = {
     pickups: { section: 'pickups', menu: 'nav-pickups', show: p => CN.pickups.show('pickups', p) },
@@ -15,8 +15,11 @@
     insights: { section: 'insights', menu: 'nav-insights', show: p => CN.insights.show(p, 'insights') },
     // Insights lists its pick-ups in the Pick Up Detail table.
     'insights/details': { section: 'details', menu: 'nav-insights', show: p => CN.insights.show(p, 'details') },
+    mail: { section: 'mail', menu: 'nav-mail', show: p => CN.mail.show(p, 'mail') },
+    'mail/details': { section: 'mail-details', menu: 'nav-mail', show: p => CN.mail.show(p, 'details') },
   };
-  // { name, source: 'google' | 'file', sheets, pickups, payouts (or null), payoutsProblem, loadedAt }
+  // { name, source: 'google' | 'file', sheets, pickups, payouts and mail (each null when its sheet is
+  // missing or unreadable), payoutsProblem and mailProblem (why), loadedAt }
   let book = null;
 
   const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
@@ -74,6 +77,7 @@
     CN.pickups.load(book.pickups);
     CN.drivers.load(book);
     CN.insights.load(book);
+    CN.mail.load(book);
     clearErrors();
     renderStatus();
     if (!PATHS[location.hash.replace(/^#\/?/, '').split('?')[0]]) history.replaceState(null, '', '#/pickups');
@@ -137,15 +141,16 @@
   }
 
   function renderStatus() {
-    const p = book.pickups, q = book.payouts, google = book.source === 'google';
+    const p = book.pickups, q = book.payouts, m = book.mail, google = book.source === 'google';
     $('status-file').textContent = [
       google ? `${book.name} (Google Sheets)` : book.name,
       `${F.int(p.n)} pick-up lines`,
       q ? `${F.int(q.n)} payout lines` : '',
+      m ? `${F.int(m.n)} mail order lines` : '',
       `${F.dayLong(p.minDay)} – ${F.dayLong(p.maxDay)}`,
       google ? `loaded ${F.clock(book.loadedAt)}` : '',
     ].filter(Boolean).join(' · ');
-    const count = noteCount(p.notes) + (q ? noteCount(q.notes) : 1);
+    const count = noteCount(p.notes) + (q ? noteCount(q.notes) : 1) + (m ? noteCount(m.notes) : 1);
     $('status-notes').textContent = count ? `Data notes (${count})` : 'Data notes';
     for (const id of ['status-refresh', 'status-choose', 'status-signout']) $(id).hidden = !google;
     if (CN.google.fixedSheet) $('status-choose').hidden = true; // js/config.js names the sheet
@@ -189,16 +194,16 @@
         n.badAmounts.slice(0, 8).map(x => `row ${x.row} ("${esc(x.value)}")`).join(', ') + (n.badAmounts.length > 8 ? ', …' : '') + '</li>');
     }
     if (n.noAmount) items.push(`<li>${F.int(n.noAmount)} row${n.noAmount > 1 ? 's have' : ' has'} no amount and count${n.noAmount > 1 ? '' : 's'} as $0.</li>`);
-    items.push(payoutNotes());
+    items.push(sheetNotes(book.payouts, book.payoutsProblem, 'Driver Payouts', 'The Drivers page shows no payouts.'));
+    items.push(sheetNotes(book.mail, book.mailProblem, 'Mail_Order', 'The Mail Order page shows no mail orders.'));
     items.push('<li>Names that differ only in capital letters or extra spaces count as one, as in Power BI ' +
       '(for example "PAUL" and "Paul"). Each is shown with the spelling that appears first in the sheet.</li>');
     $('notes-list').innerHTML = items.join('');
   }
 
-  // The Driver Payouts sheet's notes, in one item.
-  function payoutNotes() {
-    const q = book.payouts;
-    if (!q) return `<li><b>Driver Payouts:</b> ${esc(book.payoutsProblem)} The Drivers page shows no payouts.</li>`;
+  // One optional sheet's notes in one item: q is its data, or null and `problem` says why.
+  function sheetNotes(q, problem, name, without) {
+    if (!q) return `<li><b>${name}:</b> ${esc(problem)} ${without}</li>`;
     const n = q.notes, parts = [];
     const rows = list => list.slice(0, 8).map(x => `row ${x.row} ("${esc(x.value)}")`).join(', ') + (list.length > 8 ? ', …' : '');
     const s = (k, one, many) => `${F.int(k)} ${k === 1 ? one : many}`;
@@ -212,7 +217,7 @@
     if (n.noAmount) parts.push(`${s(n.noAmount, 'row has', 'rows have')} no amount and count as $0`);
     if (n.badDates.length) parts.push(`${s(n.badDates.length, 'row has a date that', 'rows have a date that')} can't be read and ${n.badDates.length === 1 ? 'is' : 'are'} left out: ${rows(n.badDates)}`);
     if (n.noDate) parts.push(`${s(n.noDate, 'row has', 'rows have')} no date and ${n.noDate === 1 ? 'is' : 'are'} left out`);
-    return parts.length ? `<li><b>Driver Payouts:</b> ${parts.join('; ')}.</li>` : '';
+    return parts.length ? `<li><b>${name}:</b> ${parts.join('; ')}.</li>` : '';
   }
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -227,6 +232,7 @@
     CN.pickups.init();
     CN.drivers.init();
     CN.insights.init();
+    CN.mail.init();
     setUpStart();
     const pick = () => $('file-input').click();
     for (const id of ['open-file', 'open-file-alt', 'status-open']) $(id).addEventListener('click', pick);

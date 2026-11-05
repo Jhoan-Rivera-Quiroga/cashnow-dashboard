@@ -192,17 +192,17 @@
     return rows;
   }
 
-  // Reads the Collection sheet, and the Driver Payouts sheet when there is one. Only the columns the
-  // dashboard uses are downloaded.
+  // Reads the Collection sheet, and each optional sheet (Driver Payouts, Mail_Order) that's there.
+  // Only the columns the dashboard uses are downloaded.
   async function readSheet(id, accessToken) {
     const base = encodeURIComponent(id);
     const meta = await api(base, [['fields', 'properties.title,sheets.properties.title']], accessToken);
     const title = meta.properties.title;
     const names = meta.sheets.map(s => s.properties.title);
     const what = `The "${title}" spreadsheet`;
-    const payoutSheet = CN.data.findPayoutSheet(names);
-    const tabs = [{ sheet: CN.data.findSheet(names, what), columns: CN.data.pickupColumns }];
-    if (payoutSheet) tabs.push({ sheet: payoutSheet, columns: CN.data.payoutColumns });
+    const tabs = [{ sheet: CN.data.findSheet(names, what), columns: CN.data.pickupColumns, read: CN.data.readPickups }];
+    const optional = CN.data.OPTIONAL_SHEETS.map(o => Object.assign({ o, sheet: CN.data.findOptional(names, o) }, o));
+    tabs.push(...optional.filter(t => t.sheet));
 
     // Each sheet's header is its first row with anything in it.
     const tops = await api(`${base}/values:batchGet`, [...tabs.map(t => ['ranges', quote(t.sheet) + '!1:20']), ...RAW], accessToken);
@@ -216,7 +216,7 @@
         t.cols = Object.values(t.columns(head[t.h], t.sheet)).filter(c => c >= 0).map(c => columnLetters(c));
       } catch (err) {
         if (i === 0 || !(err instanceof DataError)) throw err;
-        t.problem = err; // the Drivers page says why it has no payouts
+        t.problem = err; // only that sheet's page goes without, and says why
         continue;
       }
       t.first = ranges.length;
@@ -224,12 +224,15 @@
     }
     const data = await api(`${base}/values:batchGet`, [...ranges, ['majorDimension', 'COLUMNS'], ...RAW], accessToken);
     const rowsOf = t => toRows(data.valueRanges.slice(t.first, t.first + t.cols.length));
-    const [c, p] = tabs;
-    const loaded = { name: title, source: 'google', sheets: names, pickups: CN.data.readPickups(rowsOf(c), c.h, c.sheet, 0) };
-    return Object.assign(loaded, CN.data.optionalPayouts(payoutSheet, () => {
-      if (p.problem) throw p.problem;
-      return CN.data.readPayouts(rowsOf(p), p.h, p.sheet, 0);
-    }, what));
+    const c = tabs[0];
+    const loaded = { name: title, source: 'google', sheets: names, pickups: c.read(rowsOf(c), c.h, c.sheet, 0) };
+    for (const t of optional) {
+      Object.assign(loaded, CN.data.optionalSheet(t.o, t.sheet, () => {
+        if (t.problem) throw t.problem;
+        return t.read(rowsOf(t), t.h, t.sheet, 0);
+      }, what));
+    }
+    return loaded;
   }
 
   const wait = ms => new Promise(resolve => setTimeout(resolve, ms));

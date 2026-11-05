@@ -35,6 +35,27 @@
   };
   const PAYOUT_TEXT = ['driver', 'concept', 'note'];
 
+  // Columns the Mail Order pages read. Each order has a row per product line, and each day has a
+  // row of its own that only counts the orders completed (Order Qty).
+  const MAIL_COLUMNS = {
+    date: 'Delivery Date', // the date Power BI's mail pages filter on
+    order: 'Delivery Order (D.O.) No.',
+    vendor: 'First Name',
+    product: 'Product Code / Name',
+    units: 'Quantity',
+    amount: 'Total', // the line's dollars; "Payment Amount" repeats the whole order's on every line
+    orders: 'Order Qty',
+  };
+  const MAIL_OPTIONAL = { person: 'Sales Person' };
+  const MAIL_TEXT = ['order', 'vendor', 'product', 'person'];
+
+  // Sheets that each feed one page. When one is missing or can't be read, the other pages keep
+  // working and that page says why. The loaded data goes in `field`, the reason in `field`Problem.
+  const OPTIONAL_SHEETS = [
+    { field: 'payouts', name: 'Driver Payouts', columns: (h, s) => findColumns(PAYOUT_COLUMNS, h, s), read: readPayouts },
+    { field: 'mail', name: 'Mail_Order', columns: (h, s) => findColumns(MAIL_COLUMNS, h, s, MAIL_OPTIONAL), read: readMail },
+  ];
+
   const key = s => String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]/g, '');
 
   function cleanText(v) {
@@ -127,8 +148,8 @@
     return sheet;
   }
 
-  // The sheet the Drivers page reads, or null when there is none.
-  const findPayoutSheet = names => names.find(n => key(n) === 'driverpayouts') || null;
+  // An optional sheet's name in the file, or null when it has none.
+  const findOptional = (names, o) => names.find(n => key(n) === key(o.name)) || null;
 
   // Position of each wanted column in the header row; -1 for an optional column that isn't there.
   function findColumns(wanted, header, sheet, optional = {}) {
@@ -146,18 +167,20 @@
     return col;
   }
   const pickupColumns = (header, sheet) => findColumns(PICKUP_COLUMNS, header, sheet, PICKUP_OPTIONAL);
-  const payoutColumns = (header, sheet) => findColumns(PAYOUT_COLUMNS, header, sheet);
 
-  // Only the Drivers page needs the payouts, so a missing or unreadable Driver Payouts sheet leaves
-  // the other pages working and the Drivers page says why it has no payouts.
-  function optionalPayouts(sheet, read, what) {
-    if (!sheet) return { payouts: null, payoutsProblem: `${what} has no "Driver Payouts" sheet.` };
-    try {
-      return { payouts: read(), payoutsProblem: null };
-    } catch (err) {
-      if (!(err instanceof DataError)) throw err;
-      return { payouts: null, payoutsProblem: err.message };
+  // o: one of OPTIONAL_SHEETS; sheet: its name in the file (or null); read(): its data, or a DataError.
+  function optionalSheet(o, sheet, read, what) {
+    let data = null, problem = null;
+    if (!sheet) problem = `${what} has no "${o.name}" sheet.`;
+    else {
+      try {
+        data = read();
+      } catch (err) {
+        if (!(err instanceof DataError)) throw err;
+        problem = err.message;
+      }
     }
+    return { [o.field]: data, [o.field + 'Problem']: problem };
   }
 
   // A SheetJS sheet as one array of raw values per row, and the sheet row of the first one.
@@ -173,18 +196,22 @@
     const bytes = new Uint8Array(buffer);
     const names = XLSX.read(bytes, { type: 'array', bookSheets: true }).SheetNames;
     const sheet = findSheet(names, 'This workbook');
-    const payoutSheet = findPayoutSheet(names);
+    const optional = OPTIONAL_SHEETS.map(o => ({ o, sheet: findOptional(names, o) }));
     const wb = XLSX.read(bytes, {
-      type: 'array', sheets: payoutSheet ? [sheet, payoutSheet] : [sheet], dense: true, cellText: false, cellHTML: false,
+      type: 'array', sheets: [sheet, ...optional.filter(x => x.sheet).map(x => x.sheet)],
+      dense: true, cellText: false, cellHTML: false,
     });
     const props = wb.Workbook && wb.Workbook.WBProps;
     const offset = props && props.date1904 ? 1462 : 0;
     const c = sheetRows(wb.Sheets[sheet], sheet);
     const loaded = { name: fileName, source: 'file', sheets: names, pickups: readPickups(c.rows, c.firstRow, sheet, offset) };
-    return Object.assign(loaded, optionalPayouts(payoutSheet, () => {
-      const p = sheetRows(wb.Sheets[payoutSheet], payoutSheet);
-      return readPayouts(p.rows, p.firstRow, payoutSheet, offset);
-    }, 'This workbook'));
+    for (const { o, sheet: s } of optional) {
+      Object.assign(loaded, optionalSheet(o, s, () => {
+        const r = sheetRows(wb.Sheets[s], s);
+        return o.read(r.rows, r.firstRow, s, offset);
+      }, 'This workbook'));
+    }
+    return loaded;
   }
 
   // rows: one array of raw cell values per sheet row (numbers, dates as serial numbers, text,
@@ -219,16 +246,6 @@
     }
     if (!Number.isFinite(minDay)) throw new DataError(`No readable dates in the "${sheet}" sheet's ${PICKUP_COLUMNS.date} column.`);
 
-    // Week (Monday start) and month of each row, for the Daily/Weekly/Monthly switch.
-    const week = new Int32Array(n), month = new Int32Array(n);
-    for (let i = 0; i < n; i++) {
-      const d = day[i];
-      if (d < 0) { week[i] = month[i] = -1; continue; }
-      week[i] = d - ((((d - F.EPOCH + 3) % 7) + 7) % 7);
-      const t = F.toDate(d);
-      month[i] = F.fromYmd(t.getUTCFullYear(), t.getUTCMonth() + 1, 1);
-    }
-
     const out = {
       sheet, n, minDay, maxDay, notes, hasCategory: col.category >= 0,
       day: day.subarray(0, n), amount: amount.subarray(0, n), units: units.subarray(0, n),
@@ -238,15 +255,28 @@
       out[f] = codes[f].subarray(0, n);
       out.labels[f] = dicts[f].labels();
     }
-    out.bucket = { daily: out.day, weekly: week, monthly: month };
+    out.bucket = buckets(out.day);
     return out;
+  }
+
+  // Each row's day, week (Monday start) and month, for the Daily/Weekly/Monthly switch; -1 for no date.
+  function buckets(day) {
+    const week = new Int32Array(day.length), month = new Int32Array(day.length);
+    for (let i = 0; i < day.length; i++) {
+      const d = day[i];
+      if (d < 0) { week[i] = month[i] = -1; continue; }
+      week[i] = d - ((((d - F.EPOCH + 3) % 7) + 7) % 7);
+      const t = F.toDate(d);
+      month[i] = F.fromYmd(t.getUTCFullYear(), t.getUTCMonth() + 1, 1);
+    }
+    return { daily: day, weekly: week, monthly: month };
   }
 
   // The Driver Payouts sheet, one row per payment to a driver; rows as for readPickups.
   function readPayouts(rows, firstRow, sheet, dateOffset) {
     const h = rows.findIndex(r => r.some(v => v != null));
     if (h < 0) throw new DataError(`The "${sheet}" sheet is empty.`);
-    const col = payoutColumns(rows[h], sheet);
+    const col = findColumns(PAYOUT_COLUMNS, rows[h], sheet);
     const used = Object.values(col);
 
     const cap = rows.length - h - 1;
@@ -283,8 +313,56 @@
     return out;
   }
 
+  // The Mail_Order sheet; rows as for readPickups.
+  function readMail(rows, firstRow, sheet, dateOffset) {
+    const h = rows.findIndex(r => r.some(v => v != null));
+    if (h < 0) throw new DataError(`The "${sheet}" sheet is empty.`);
+    const col = findColumns(MAIL_COLUMNS, rows[h], sheet, MAIL_OPTIONAL);
+    const used = Object.values(col).filter(c => c >= 0);
+
+    const cap = rows.length - h - 1;
+    const day = new Int32Array(cap), amount = new Float64Array(cap), units = new Float64Array(cap), orders = new Float64Array(cap);
+    const dicts = {}, codes = {};
+    MAIL_TEXT.forEach(f => { dicts[f] = new Dict(); codes[f] = new Int32Array(cap); });
+    const notes = newNotes();
+    let n = 0, minDay = Infinity, maxDay = -Infinity;
+
+    for (let j = h + 1; j < rows.length; j++) {
+      const row = rows[j];
+      if (!used.some(c => row[c] != null)) continue;
+      const excelRow = firstRow + j + 1;
+      const d = readDate(row[col.date], dateOffset, notes, excelRow);
+      if (d >= 0) {
+        if (d < minDay) minDay = d;
+        if (d > maxDay) maxDay = d;
+      }
+      day[n] = d;
+      for (const f of MAIL_TEXT) codes[f][n] = dicts[f].code(cleanText(row[col[f]]));
+      // A day's orders-completed row has no line amount, and that isn't worth a data note.
+      const countRow = cleanText(row[col.amount]) === null && cleanText(row[col.orders]) !== null;
+      amount[n] = countRow ? 0 : readAmount(row[col.amount], d, notes, excelRow);
+      const o = toNumber(row[col.orders]), u = toNumber(row[col.units]);
+      orders[n] = Number.isNaN(o) ? 0 : o;
+      units[n] = Number.isNaN(u) ? 0 : u;
+      n++;
+    }
+
+    const dated = Number.isFinite(minDay);
+    const out = {
+      sheet, n, notes, hasPerson: col.person >= 0, minDay: dated ? minDay : null, maxDay: dated ? maxDay : null,
+      day: day.subarray(0, n), amount: amount.subarray(0, n), units: units.subarray(0, n), orders: orders.subarray(0, n),
+      labels: {},
+    };
+    for (const f of MAIL_TEXT) {
+      out[f] = codes[f].subarray(0, n);
+      out.labels[f] = dicts[f].labels();
+    }
+    out.bucket = buckets(out.day);
+    return out;
+  }
+
   CN.data = {
-    readWorkbook, readPickups, readPayouts, findSheet, findPayoutSheet, pickupColumns, payoutColumns,
-    optionalPayouts, toNumber, toDay, DataError,
+    readWorkbook, readPickups, findSheet, pickupColumns, OPTIONAL_SHEETS, findOptional, optionalSheet,
+    toNumber, toDay, DataError,
   };
 })(window.CashNow = window.CashNow || {});

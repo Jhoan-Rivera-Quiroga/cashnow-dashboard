@@ -13,7 +13,6 @@
   const GRAY = '#a59aa3';
   const KINDS = ['driver', 'concept', 'bonus']; // what can be selected, and its address parameter
   const PRESETS = CN.ranges.PRESETS;
-  const PAGE = 500; // detail rows added per "Show more"
 
   let P = null, Q = null, problem = null; // pick-ups; payouts, or null and why there are none
   let K = null; // per-code lookups for the payouts
@@ -22,7 +21,7 @@
   let first = 0, last = 0; // first and last day across pick-ups and payouts
   let view = 'drivers'; // or 'details'
   const S = { preset: 'last4', from: 0, to: 0, sel: null }; // sel: { kind, key, label }
-  const D = { rows: [], sort: 'day', dir: 1, shown: 0 };
+  let table = null; // the Driver Payout Detail table
 
   const lower = s => s.toLowerCase();
   const pct = x => (x * 100).toFixed(1) + '%';
@@ -226,16 +225,19 @@
 
   /* ---------- Driver Payout Detail ---------- */
 
-  const collator = new Intl.Collator('en', { sensitivity: 'base' });
-  const TEXT_COLS = new Set(['driver', 'concept', 'note']);
-  const TIE_ORDER = ['day', 'driver', 'concept', 'note'];
+  const DETAIL_COLUMNS = [
+    { key: 'day', label: 'Date', type: 'day' },
+    { key: 'driver', label: 'Driver name', type: 'text' },
+    { key: 'concept', label: 'Concept', type: 'text' },
+    { key: 'note', label: 'Notes', type: 'text' },
+    { key: 'amount', label: 'Payment Amount', type: 'money' },
+  ];
   const label = (list, code) => (code < 0 ? '' : list[code]);
 
   // The payout lines behind the total: one row per date, driver, concept and note, with the amounts
   // summed, as a Power BI table shows them.
   function renderDetails() {
     const groups = new Map();
-    let total = 0;
     for (let i = 0; Q && i < Q.n; i++) {
       if (!inRange(Q.day[i])) continue;
       const ok = passes(i);
@@ -250,68 +252,13 @@
         });
       }
       r.amount += Q.amount[i];
-      total += Q.amount[i];
     }
-    D.rows = [...groups.values()];
-    sortRows();
+    table.set([...groups.values()]);
     $('drv-details-context').textContent = Q
-      ? [rangePhrase(), S.sel ? selectionPhrase() : 'All payouts', `${F.int(D.rows.length)} rows`].join(' · ')
+      ? [rangePhrase(), S.sel ? selectionPhrase() : 'All payouts', `${F.int(table.length)} rows`].join(' · ')
       : problem;
-    $('drv-details-total').textContent = F.money(total);
-    $('drv-details-export').disabled = !D.rows.length;
-    redrawRows();
+    $('drv-details-export').disabled = !table.length;
     saveHash();
-  }
-
-  function sortRows() {
-    const keys = [D.sort, ...TIE_ORDER.filter(k => k !== D.sort)];
-    D.rows.sort((a, b) => {
-      for (let j = 0; j < keys.length; j++) {
-        const k = keys[j];
-        const c = TEXT_COLS.has(k) ? collator.compare(a[k], b[k]) : a[k] - b[k];
-        if (c) return j === 0 ? c * D.dir : c;
-      }
-      return 0;
-    });
-    document.querySelectorAll('#drv-details-table th[data-sort]').forEach(th => {
-      th.setAttribute('aria-sort', th.dataset.sort !== D.sort ? 'none' : D.dir > 0 ? 'ascending' : 'descending');
-    });
-  }
-
-  function redrawRows() {
-    $('drv-details-body').textContent = '';
-    D.shown = 0;
-    showMoreRows();
-  }
-
-  function showMoreRows() {
-    const end = Math.min(D.rows.length, D.shown + PAGE);
-    let html = '';
-    for (let i = D.shown; i < end; i++) {
-      const r = D.rows[i];
-      html += `<tr><td>${F.iso(r.day)}</td><td>${esc(r.driver)}</td><td>${esc(r.concept)}</td><td>${esc(r.note)}</td>` +
-        `<td class="num">${F.money(r.amount)}</td></tr>`;
-    }
-    $('drv-details-body').insertAdjacentHTML('beforeend', html);
-    D.shown = end;
-    const left = D.rows.length - end;
-    $('drv-details-more').hidden = left <= 0;
-    $('drv-details-more').textContent = `Show ${F.int(Math.min(PAGE, left))} more (${F.int(left)} not shown)`;
-  }
-
-  // CSV of every detail row.
-  function exportCsv() {
-    const lines = ['Date,Driver name,Concept,Notes,Payment Amount'];
-    for (const r of D.rows) {
-      lines.push([F.iso(r.day), F.csv(r.driver), F.csv(r.concept), F.csv(r.note), r.amount.toFixed(2)].join(','));
-    }
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
-    a.download = `driver-payout-detail_${F.iso(S.from)}_to_${F.iso(S.to)}.csv`;
-    document.body.append(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
 
   /* ---------- filters in the address, so a view can be bookmarked or shared ---------- */
@@ -382,15 +329,10 @@
       e.preventDefault();
       location.hash = '#/drivers?' + toParams();
     });
-    $('drv-details-more').addEventListener('click', showMoreRows);
-    $('drv-details-export').addEventListener('click', exportCsv);
-    document.querySelectorAll('#drv-details-table th[data-sort] button').forEach(b => b.addEventListener('click', () => {
-      const k = b.parentElement.dataset.sort;
-      D.dir = D.sort === k ? -D.dir : 1;
-      D.sort = k;
-      sortRows();
-      redrawRows();
-    }));
+    table = CN.table.create({ table: 'drv-details-table', more: 'drv-details-more' }, DETAIL_COLUMNS);
+    $('drv-details-export').addEventListener('click', () => {
+      table.download(`driver-payout-detail_${F.iso(S.from)}_to_${F.iso(S.to)}.csv`);
+    });
   }
 
   function load(book) {

@@ -4,26 +4,14 @@
   'use strict';
   const F = CN.fmt;
   const $ = id => document.getElementById(id);
-  const LINE = '#6b007b';
-  const PAGE = 500; // detail rows added per "Show more"
-
-  const GRAN = {
-    daily: { name: 'Daily', label: F.dayShort, phrase: F.dayLong },
-    weekly: { name: 'Weekly', label: F.dayShort, phrase: s => 'Week of ' + F.dayLong(s) },
-    monthly: { name: 'Monthly', label: F.month, phrase: F.monthLong },
-  };
-
-  const PRESETS = CN.ranges.PRESETS;
+  const { PRESETS, GRAN } = CN.ranges;
 
   let P = null; // pick-up columns from CN.data
   let charts = null;
   let last = null; // latest compute() result
-  let view = 'pickups';
+  let table = null; // the Pick Up Detail table
   const S = { preset: 'last4', from: 0, to: 0, g: 'monthly', states: null, sel: null };
-  const D = { rows: [], sort: 'day', dir: 1, shown: 0 };
 
-  const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-  const esc = s => String(s).replace(/[&<>"']/g, c => ESC[c]);
   const label = (field, code) => (code < 0 ? '' : P.labels[field][code]);
   const stateLabel = code => (code < 0 ? '(Blank)' : P.labels.state[code]);
 
@@ -122,19 +110,7 @@
     const btn = $('details-btn');
     btn.disabled = r.pickups === 0 && r.cash === 0;
     btn.title = `List the pick-ups for ${scopePhrase()}`;
-    fitKpis();
-  }
-
-  // Shrink a card's value until it fits on one line, so long names like "RAY ALVARADO" stay readable.
-  function fitKpis() {
-    document.querySelectorAll('.kpi-value').forEach(el => {
-      el.style.fontSize = '';
-      let size = parseFloat(getComputedStyle(el).fontSize);
-      while (el.scrollWidth > el.clientWidth && size > 12) {
-        size -= 1;
-        el.style.fontSize = size + 'px';
-      }
-    });
+    CN.charts.fitKpis($('view-pickups'));
   }
 
   function ensureCharts() {
@@ -146,81 +122,18 @@
     ro.observe($('chart-pickups'));
   }
 
-  // Clicking anywhere in a point's column selects it, like clicking a point in Power BI;
-  // clicking the same point again clears the selection.
+  // Clicking a point selects it; clicking the same point again clears the selection.
   function onChartClick(chart, ev) {
-    if (!last || !last.keys.length) return;
-    const pt = [ev.offsetX, ev.offsetY];
-    if (!chart.containPixel({ gridIndex: 0 }, pt)) return;
-    const x = chart.convertFromPixel({ gridIndex: 0 }, pt)[0];
-    const k = last.keys[Math.max(0, Math.min(last.keys.length - 1, Math.round(x)))];
+    const k = last ? CN.charts.pointAt(chart, ev, last.keys) : null;
+    if (k === null) return;
     S.sel = S.sel === k ? null : k;
     render();
   }
 
   function renderCharts(r) {
-    charts[0].setOption(lineOption(r.keys, r.cashSeries, true));
-    charts[1].setOption(lineOption(r.keys, r.pickSeries, false));
-  }
-
-  function lineOption(keys, values, isCash) {
-    const g = GRAN[S.g];
-    const sel = S.sel === null ? -1 : keys.indexOf(S.sel);
-    const dim = sel >= 0;
-    const inK = isCash && values.some(v => v >= 1000);
-    const valueLabel = v => (inK ? (v / 1000).toFixed(1) + 'K' : F.int(v));
-    return {
-      animationDuration: 300,
-      grid: { left: 52, right: 30, top: 34, bottom: 28 },
-      tooltip: {
-        trigger: 'axis',
-        axisPointer: { type: 'line', lineStyle: { color: '#d7b8d3' } },
-        formatter: ps => {
-          const p = ps.find(q => q.seriesIndex === 0);
-          if (!p) return '';
-          const v = isCash ? F.money(p.value) : `${F.int(p.value)} pick-ups`;
-          return `${g.name} ${F.iso(keys[p.dataIndex])}<br><b>${v}</b><br><span style="color:#8a7a88">Click to filter</span>`;
-        },
-      },
-      xAxis: {
-        type: 'category',
-        data: keys.map(g.label),
-        axisTick: { show: false },
-        axisLine: { lineStyle: { color: '#d9c3d6' } },
-        axisLabel: { color: '#6e5a6b', hideOverlap: true },
-      },
-      yAxis: [
-        {
-          type: 'value', min: 0, splitNumber: 3, splitLine: { show: false },
-          axisLabel: { color: '#6e5a6b', formatter: v => (inK ? v / 1000 + 'K' : F.int(v)) },
-        },
-        { type: 'value', min: 0, max: 1, show: false },
-      ],
-      series: [
-        {
-          type: 'line',
-          data: values.map((v, i) => ({
-            value: v,
-            symbolSize: i === sel ? 12 : 7,
-            itemStyle: { opacity: !dim || i === sel ? 1 : 0.3 },
-            label: { color: !dim || i === sel ? '#000' : 'rgba(0, 0, 0, 0.3)' },
-          })),
-          symbol: 'circle',
-          showAllSymbol: true,
-          lineStyle: { color: LINE, width: 2.5, opacity: dim ? 0.45 : 1 },
-          itemStyle: { color: LINE },
-          label: { show: true, position: 'top', distance: 7, fontSize: 12, fontWeight: 700, formatter: p => valueLabel(p.value) },
-          labelLayout: { hideOverlap: true },
-          emphasis: { scale: 1.4 },
-          z: 3,
-        },
-        { // band behind the selected point
-          type: 'bar', yAxisIndex: 1, silent: true, z: 1, barWidth: '86%',
-          data: keys.map((_, i) => (i === sel ? 1 : null)),
-          itemStyle: { color: 'rgba(107, 0, 123, 0.13)', borderRadius: 6 },
-        },
-      ],
-    };
+    const opts = { gran: GRAN[S.g], sel: S.sel };
+    CN.charts.line(charts[0], r.keys, r.cashSeries, Object.assign({ money: true }, opts));
+    CN.charts.line(charts[1], r.keys, r.pickSeries, Object.assign({ unit: 'pick-ups' }, opts));
   }
 
   function scopePhrase() {
@@ -319,9 +232,15 @@
 
   /* ---------- Pick Up Detail ---------- */
 
-  const collator = new Intl.Collator('en', { sensitivity: 'base' });
-  const TEXT_COLS = new Set(['order', 'vendor', 'city', 'product']);
-  const TIE_ORDER = ['day', 'order', 'vendor', 'city', 'product'];
+  const DETAIL_COLUMNS = [
+    { key: 'day', label: 'Date', type: 'day' },
+    { key: 'order', label: 'Order Number', type: 'text' },
+    { key: 'vendor', label: 'First_Name', type: 'text' },
+    { key: 'city', label: 'City', type: 'text' },
+    { key: 'product', label: 'Product_Code', type: 'text' },
+    { key: 'units', label: 'Quantity', type: 'num' },
+    { key: 'cash', label: 'Cash Spent', type: 'money' },
+  ];
   // What the table lists, and where Back and the CSV name point: { match(i), phrase, hash, back,
   // backLabel, file }. The Insights page opens the same table for its own selection.
   let listed = null;
@@ -346,7 +265,6 @@
     listed = opts;
     const groups = new Map();
     const orders = new Set();
-    let units = 0, cash = 0;
     for (let i = 0; i < P.n; i++) {
       if (!opts.match(i)) continue;
       const k = `${P.day[i]}|${P.order[i]}|${P.vendor[i]}|${P.city[i]}|${P.product[i]}`;
@@ -359,73 +277,15 @@
       }
       r.units += P.units[i];
       r.cash += P.amount[i];
-      units += P.units[i];
-      cash += P.amount[i];
       if (P.order[i] >= 0) orders.add(P.order[i]);
     }
-    D.rows = [...groups.values()];
-    sortRows();
-    $('details-context').textContent = `${opts.phrase} · ${F.int(orders.size)} pick-ups · ${F.int(D.rows.length)} rows`;
-    $('details-units').textContent = F.num(units);
-    $('details-cash').textContent = F.money(cash);
-    $('details-export').disabled = !D.rows.length;
+    table.set([...groups.values()]);
+    $('details-context').textContent = `${opts.phrase} · ${F.int(orders.size)} pick-ups · ${F.int(table.length)} rows`;
+    $('details-export').disabled = !table.length;
     $('details-back').href = opts.back;
     $('details-back').setAttribute('aria-label', opts.backLabel);
-    redrawRows();
     if (location.hash === opts.hash) return;
     try { history.replaceState(null, '', opts.hash); } catch (e) { /* some browsers refuse this on file:// pages */ }
-  }
-
-  function sortRows() {
-    const keys = [D.sort, ...TIE_ORDER.filter(k => k !== D.sort)];
-    D.rows.sort((a, b) => {
-      for (let j = 0; j < keys.length; j++) {
-        const k = keys[j];
-        const c = TEXT_COLS.has(k) ? collator.compare(a[k], b[k]) : a[k] - b[k];
-        if (c) return j === 0 ? c * D.dir : c;
-      }
-      return 0;
-    });
-    document.querySelectorAll('#details-table th[data-sort]').forEach(th => {
-      th.setAttribute('aria-sort', th.dataset.sort !== D.sort ? 'none' : D.dir > 0 ? 'ascending' : 'descending');
-    });
-  }
-
-  function redrawRows() {
-    $('details-body').textContent = '';
-    D.shown = 0;
-    showMoreRows();
-  }
-
-  function showMoreRows() {
-    const end = Math.min(D.rows.length, D.shown + PAGE);
-    let html = '';
-    for (let i = D.shown; i < end; i++) {
-      const r = D.rows[i];
-      html += `<tr><td>${F.iso(r.day)}</td><td>${esc(r.order)}</td><td>${esc(r.vendor)}</td><td>${esc(r.city)}</td>` +
-        `<td>${esc(r.product)}</td><td class="num">${F.num(r.units)}</td><td class="num">${F.money(r.cash)}</td></tr>`;
-    }
-    $('details-body').insertAdjacentHTML('beforeend', html);
-    D.shown = end;
-    const left = D.rows.length - end;
-    $('details-more').hidden = left <= 0;
-    $('details-more').textContent = `Show ${F.int(Math.min(PAGE, left))} more (${F.int(left)} not shown)`;
-  }
-
-  // CSV of every detail row.
-  function exportCsv() {
-    const lines = ['Date,Order Number,First_Name,City,Product_Code,Quantity,Cash Spent'];
-    for (const r of D.rows) {
-      lines.push([F.iso(r.day), F.csv(r.order), F.csv(r.vendor), F.csv(r.city), F.csv(r.product),
-        r.units, r.cash.toFixed(2)].join(','));
-    }
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
-    a.download = listed.file;
-    document.body.append(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
 
   /* ---------- wiring ---------- */
@@ -464,21 +324,14 @@
       const box = $('state-filter');
       if (box.open && !box.contains(e.target)) box.open = false;
     });
-    new ResizeObserver(fitKpis).observe(document.querySelector('.kpis'));
+    new ResizeObserver(() => CN.charts.fitKpis($('view-pickups'))).observe(document.querySelector('#view-pickups .kpis'));
     $('clear-selection').addEventListener('click', () => { S.sel = null; render(); });
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape' && document.body.dataset.view === 'pickups' && S.sel !== null && P) { S.sel = null; render(); }
     });
     $('details-btn').addEventListener('click', () => { location.hash = '#/pickups/details?' + toParams(); });
-    $('details-more').addEventListener('click', showMoreRows);
-    $('details-export').addEventListener('click', exportCsv);
-    document.querySelectorAll('#details-table th[data-sort] button').forEach(b => b.addEventListener('click', () => {
-      const k = b.parentElement.dataset.sort;
-      D.dir = D.sort === k ? -D.dir : 1;
-      D.sort = k;
-      sortRows();
-      redrawRows();
-    }));
+    table = CN.table.create({ table: 'details-table', more: 'details-more' }, DETAIL_COLUMNS);
+    $('details-export').addEventListener('click', () => table.download(listed.file));
   }
 
   function load(data) {
@@ -493,7 +346,6 @@
   }
 
   function show(v, params) {
-    view = v;
     applyParams(params);
     syncStateChecks();
     if (v === 'details') {
