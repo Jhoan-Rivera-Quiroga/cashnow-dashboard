@@ -5,8 +5,8 @@ browser, so it can be hosted for free on GitHub Pages with no server.
 
 So far it has the **Pick Ups** page with its **Pick Up Detail** drill-through, the **Drivers** and
 **Insights** pages, the **Mail Order** page with its **Mail Details** drill-through, and the
-**Electronics** and **Vendors & Products** pages. The other pages are listed in the menu and come
-next.
+**Electronics**, **Vendors & Products** and **Demographics** pages. The other pages are listed in the
+menu and come next.
 
 ## Your data stays out of this repository
 
@@ -73,6 +73,12 @@ The **Vendors & Products** page is the mail-order counterpart of Insights. It sh
 vendors and top 10 products by mail cash spent. Clicking a vendor or a product filters the other
 chart, and **Details** lists the order lines behind the view in the Mail Details table.
 
+The **Demographics** page shows where the business comes from. It has two halves, each with its own
+dates: pick-ups by state and by city (the top 15 cities, with the rest summed as "Other"), and mail
+orders by state. Power BI's maps on this page don't draw, and its city pie has about 150 slices, so
+this page uses bars with each one's share. Clicking a state or a city filters its half, and each
+half's **Details** lists the pick-ups or mail orders behind it.
+
 ## Setting up Google sign-in
 
 This is done once, in a Google Cloud project:
@@ -130,7 +136,7 @@ holds the dollars paid), and `Category` when the sheet has it, for the Insights 
 Drivers page also reads the **Driver Payouts** sheet: `Date`,
 `Driver name`, `Payment Amount`, `Concept` and `Notes`. The Mail Order pages read the **Mail_Order**
 sheet: `Delivery Date`, `Delivery Order (D.O.) No.`, `First Name`, `Product Code / Name`, `Quantity`,
-`Total`, `Order Qty`, and `Sales Person` when it's there. The Electronics page reads the
+`Total`, `Order Qty`, and `Sales Person` and `State` when they're there. The Electronics page reads the
 **Electronics** sheet: `Collection Date`, `First Name`, `Marketing Name`, `Quantity` and `Comments`
 (the amount paid). Without any of these three sheets, the other pages still work.
 From Google Sheets the dashboard downloads only those columns. If a column is renamed, the page names
@@ -152,7 +158,9 @@ Cleaning rules:
 
 - Dates may be real dates or text such as `2026-03-11`.
 - Names that differ only in capital letters or extra spaces count as one (`PAUL` and `Paul`), and each
-  is shown with the spelling that appears first in the sheet, both as in Power BI.
+  is shown with the spelling that appears first in the sheet, as in Power BI. One difference: Power BI
+  ignores spaces only at the end of a name, so it keeps `" Cincinnati"`, with a space in front, apart
+  from `Cincinnati` ($47 of pick-ups in January to April 2026).
 - Amounts typed as text with a decimal comma (`77,5`) are read as 77.5. Power BI reads them as 775,
   which puts its February 2026 total $702 higher. **Data notes** at the bottom of the page lists
   every such cell.
@@ -167,7 +175,7 @@ Cleaning rules:
 
 ## Next steps
 
-- The remaining pages: Demographics, Cancelled and Call Report.
+- The remaining pages: Cancelled and Call Report.
 
 ## Built with
 

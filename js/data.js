@@ -67,7 +67,7 @@
   const OPTIONAL_SHEETS = [
     optional('payouts', 'Driver Payouts', { columns: PAYOUT_COLUMNS, text: ['driver', 'concept', 'note'] }),
     optional('mail', 'Mail_Order', {
-      columns: MAIL_COLUMNS, optional: { person: 'Sales Person' }, text: ['order', 'vendor', 'product', 'person'],
+      columns: MAIL_COLUMNS, optional: { person: 'Sales Person', state: 'State' }, text: ['order', 'vendor', 'product', 'person', 'state'],
       numbers: ['units', 'orders'], buckets: true,
       // A day's orders-completed row has no line amount, and that isn't worth a data note.
       countRow: (row, col) => cleanText(row[col.amount]) === null && cleanText(row[col.orders]) !== null,

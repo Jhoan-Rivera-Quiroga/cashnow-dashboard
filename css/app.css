@@ -143,6 +143,12 @@ body[data-view="details"] .main, body[data-view="drv-details"] .main { backgroun
 .drv-problem { margin: 0; padding: 10px 14px; background: #fff; border-radius: 10px; color: #a1003b; font-size: 14px; }
 .chart-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .chart-grid .chart-card { padding-bottom: 10px; }
+/* Demographics: two halves side by side, each with its own filters */
+.demo-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
+.demo-half { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.demo-head { display: flex; flex-basis: 100%; align-items: center; justify-content: space-between; gap: 10px; }
+.demo-head h2 { margin: 0; font-size: 17px; }
+.demo-head .details-btn { min-height: 38px; padding: 0 18px; font-size: 15px; }
 /* A chart beside a table on a white card */
 .table-grid { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); }
 .table-card { display: flex; flex-direction: column; gap: 8px; padding: 12px 18px 14px; }
@@ -274,7 +280,7 @@ dialog li ul { margin-top: 4px; font-size: 13px; }
   .selection { position: static; display: flex; width: fit-content; margin: 6px auto 0; }
   .table-wrap { max-height: none; }
   .policy { margin: 0; padding: 22px 16px 28px; border-radius: 0; }
-  .chart-grid { grid-template-columns: 1fr; }
+  .chart-grid, .demo-grid { grid-template-columns: 1fr; }
   .toolbar-end { margin-left: 0; }
   .kpi-inline, .details-inline.toolbar-end { flex: 1; }
   .details-inline { min-height: 44px; }

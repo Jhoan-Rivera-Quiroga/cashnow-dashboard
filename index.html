@@ -26,6 +26,7 @@
 <script defer src="js/mail.js"></script>
 <script defer src="js/electronics.js"></script>
 <script defer src="js/vendors.js"></script>
+<script defer src="js/demographics.js"></script>
 <script defer src="js/app.js"></script>
 </head>
 <body data-view="welcome">
@@ -57,7 +58,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="1.5"/><path d="m3.5 6.5 8.5 6.5 8.5-6.5"/></svg>
         <span>Vendors &amp; Products</span>
       </a>
-      <a class="nav-item" aria-disabled="true" title="Coming soon">
+      <a class="nav-item" id="nav-demographics" href="#/demographics">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/></svg>
         <span>Demographics</span>
       </a>
@@ -362,6 +363,74 @@
         <section class="chart-card">
           <h2>Top 10 Products</h2>
           <div class="chart-scroll"><div class="chart" id="chart-ven-products" role="img" aria-label="The 10 mail-order products with the most cash spent, largest first. Click a product to filter the vendors."></div></div>
+        </section>
+      </div>
+    </section>
+
+    <section class="view" id="view-demographics" hidden>
+      <div class="demo-grid">
+        <section class="demo-half" aria-labelledby="demo-p-title">
+          <header class="toolbar">
+            <div class="demo-head">
+              <h2 id="demo-p-title">Pick Up Demographics</h2>
+              <button type="button" class="details-btn" id="demo-p-details">Details</button>
+            </div>
+            <div class="field">
+              <span class="field-label">Date</span>
+              <div class="date-range">
+                <input class="control" type="date" id="demo-p-from" aria-label="From">
+                <span aria-hidden="true">–</span>
+                <input class="control" type="date" id="demo-p-to" aria-label="To">
+              </div>
+            </div>
+            <div class="field">
+              <label class="field-label" for="demo-p-preset">Range</label>
+              <select class="control" id="demo-p-preset"></select>
+            </div>
+          </header>
+          <div class="selection selection-row" id="demo-p-selection" hidden>
+            <span>Showing <b id="demo-p-selection-label"></b></span>
+            <button type="button" id="demo-p-clear">Clear</button>
+          </div>
+          <section class="chart-card">
+            <h2>Pick Ups By State</h2>
+            <div class="chart-scroll"><div class="chart" id="chart-demo-pstate" role="img" aria-label="Cash spent on pick-ups in each state, largest first. Click a state to filter the cities."></div></div>
+          </section>
+          <section class="chart-card">
+            <h2>Pick Ups By City</h2>
+            <div class="chart-scroll"><div class="chart" id="chart-demo-pcity" role="img" aria-label="Cash spent on pick-ups in the 15 top cities, with the rest as Other. Click a city to filter the states."></div></div>
+          </section>
+        </section>
+        <section class="demo-half" aria-labelledby="demo-m-title">
+          <p class="drv-problem" id="demo-m-problem" role="status" hidden></p>
+          <div class="view-body" id="demo-m-content">
+            <header class="toolbar">
+              <div class="demo-head">
+                <h2 id="demo-m-title">Mail Order Demographics</h2>
+                <button type="button" class="details-btn" id="demo-m-details">Details</button>
+              </div>
+              <div class="field">
+                <span class="field-label">Date</span>
+                <div class="date-range">
+                  <input class="control" type="date" id="demo-m-from" aria-label="From">
+                  <span aria-hidden="true">–</span>
+                  <input class="control" type="date" id="demo-m-to" aria-label="To">
+                </div>
+              </div>
+              <div class="field">
+                <label class="field-label" for="demo-m-preset">Range</label>
+                <select class="control" id="demo-m-preset"></select>
+              </div>
+            </header>
+            <div class="selection selection-row" id="demo-m-selection" hidden>
+              <span>Showing <b id="demo-m-selection-label"></b></span>
+              <button type="button" id="demo-m-clear">Clear</button>
+            </div>
+            <section class="chart-card">
+              <h2>Mail Orders By State</h2>
+              <div class="chart-scroll"><div class="chart" id="chart-demo-mstate" role="img" aria-label="Mail order cash spent in each state, largest first. Click a state to pick it for Details."></div></div>
+            </section>
+          </div>
         </section>
       </div>
     </section>

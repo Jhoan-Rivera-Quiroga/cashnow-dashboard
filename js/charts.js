@@ -25,8 +25,9 @@
   }
 
   // One bar per item, largest first, each with its value; the chart is as tall as the list needs.
-  // items: [{ label, key, value }]. opts: { selKey (highlighted, the rest dimmed), empty (message for
-  // no items), hint (tooltip line), format (value text, money by default), unit (tooltip suffix) }.
+  // items: [{ label, key, value }]; a null key can't be selected. opts: { selKey (highlighted, the rest
+  // dimmed), empty (message for no items), hint (tooltip line), format (value text, money by default),
+  // unit (tooltip suffix), label (bar-end text, format by default), labelRoom (px kept for it) }.
   function bars(chart, items, opts) {
     chart.getDom().style.height = Math.max(160, items.length * ROW + 12) + 'px';
     chart.resize();
@@ -34,15 +35,18 @@
       chart.setOption(empty(opts.empty), true);
       return;
     }
-    const format = opts.format || F.money;
+    const format = opts.format || F.money, label = opts.label || format;
     const selKey = opts.selKey === undefined ? null : opts.selKey;
     chart.setOption({
       animationDuration: 300,
-      grid: { left: 6, right: 92, top: 4, bottom: 4, containLabel: true },
+      grid: { left: 6, right: opts.labelRoom || 92, top: 4, bottom: 4, containLabel: true },
       tooltip: {
         trigger: 'item',
-        formatter: p => `${esc(p.name)}<br><b>${format(p.value)}${opts.unit || ''}</b>` +
-          hint(items[p.dataIndex].key === selKey ? 'Click again to clear' : opts.hint),
+        formatter: p => {
+          const key = items[p.dataIndex].key;
+          const more = key === null ? '' : hint(key === selKey ? 'Click again to clear' : opts.hint);
+          return `${esc(p.name)}<br><b>${format(p.value)}${opts.unit || ''}</b>` + more;
+        },
       },
       xAxis: { type: 'value', show: false, max: 'dataMax' },
       yAxis: {
@@ -54,7 +58,7 @@
         type: 'bar', barMaxWidth: 18, cursor: 'pointer',
         data: items.map(it => ({ value: it.value, itemStyle: { opacity: selKey === null || it.key === selKey ? 1 : 0.3 } })),
         itemStyle: { color: BAR, borderRadius: [0, 4, 4, 0] },
-        label: { show: true, position: 'right', color: INK, fontSize: 12, formatter: p => format(p.value) },
+        label: { show: true, position: 'right', color: INK, fontSize: 12, formatter: p => label(p.value) },
       }],
     }, true);
   }
