@@ -20,7 +20,9 @@
     units: 'Quantity',
     amount: 'Comments', // holds the dollars paid on the line
   };
-  const TEXT_FIELDS = ['order', 'vendor', 'city', 'state', 'driver', 'product'];
+  // Read when present; only the Insights page's category chart needs it.
+  const PICKUP_OPTIONAL = { category: 'Category' };
+  const TEXT_FIELDS = ['order', 'vendor', 'city', 'state', 'driver', 'product', 'category'];
 
   // Columns the Drivers page reads. The sheet repeats some of these names in a block beside the
   // table; the first column with each name is the one read.
@@ -128,20 +130,22 @@
   // The sheet the Drivers page reads, or null when there is none.
   const findPayoutSheet = names => names.find(n => key(n) === 'driverpayouts') || null;
 
-  // Position of each wanted column in the header row.
-  function findColumns(wanted, header, sheet) {
+  // Position of each wanted column in the header row; -1 for an optional column that isn't there.
+  function findColumns(wanted, header, sheet, optional = {}) {
     const col = {}, missing = [];
+    const at = name => header.findIndex(v => key(v) === key(name));
     for (const [field, name] of Object.entries(wanted)) {
-      col[field] = header.findIndex(v => key(v) === key(name));
+      col[field] = at(name);
       if (col[field] < 0) missing.push(name);
     }
     if (missing.length) {
       throw new DataError(`The "${sheet}" sheet is missing ${missing.length === 1 ? 'the column' : 'these columns'} ` +
         `${missing.join(', ')}. Its columns are: ${header.filter(v => v != null && v !== '').join(', ')}.`);
     }
+    for (const [field, name] of Object.entries(optional)) col[field] = at(name);
     return col;
   }
-  const pickupColumns = (header, sheet) => findColumns(PICKUP_COLUMNS, header, sheet);
+  const pickupColumns = (header, sheet) => findColumns(PICKUP_COLUMNS, header, sheet, PICKUP_OPTIONAL);
   const payoutColumns = (header, sheet) => findColumns(PAYOUT_COLUMNS, header, sheet);
 
   // Only the Drivers page needs the payouts, so a missing or unreadable Driver Payouts sheet leaves
@@ -226,7 +230,7 @@
     }
 
     const out = {
-      sheet, n, minDay, maxDay, notes,
+      sheet, n, minDay, maxDay, notes, hasCategory: col.category >= 0,
       day: day.subarray(0, n), amount: amount.subarray(0, n), units: units.subarray(0, n),
       labels: {},
     };

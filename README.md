@@ -3,8 +3,8 @@
 A web version of the *Cash Now Test Strips – Executive Report* (Power BI). It runs entirely in the
 browser, so it can be hosted for free on GitHub Pages with no server.
 
-So far it has the **Pick Ups** page with its **Pick Up Detail** drill-through, and the **Drivers** page.
-The other pages are listed in the menu and come next.
+So far it has the **Pick Ups** page with its **Pick Up Detail** drill-through, and the **Drivers** and
+**Insights** pages. The other pages are listed in the menu and come next.
 
 ## Your data stays out of this repository
 
@@ -50,6 +50,11 @@ Bonus, Shipping) and by type of bonus. Clicking a driver, a category or a type o
 payout charts to it, as in Power BI. Click it again, press Esc or use **Clear** to undo. **Details**
 lists the payout lines behind the total, for the date range and anything selected. The table sorts by
 any column and downloads as CSV.
+
+The **Insights** page also has its own date range. It shows the top 15 products by cash spent and by
+units bought, the top 10 vendors, and the cash spent on each product category. Clicking a product, a
+vendor or a category filters the other charts to it. **Details** lists the pick-ups behind the view in
+the Pick Up Detail table.
 
 ## Setting up Google sign-in
 
@@ -104,7 +109,8 @@ address.
 
 The page reads the **Collection** sheet, using these columns: `Collection_Date`, `Collection_Order_No`,
 `First_Name`, `City`, `State`, `Assign_to`, `Product_Code`, `Quantity` and `Comments` (`Comments`
-holds the dollars paid). The Drivers page also reads the **Driver Payouts** sheet: `Date`,
+holds the dollars paid), and `Category` when the sheet has it, for the Insights category chart. The
+Drivers page also reads the **Driver Payouts** sheet: `Date`,
 `Driver name`, `Payment Amount`, `Concept` and `Notes`. Without that sheet, the other pages still work.
 From Google Sheets the dashboard downloads only those columns. If a column is renamed, the page names
 the missing one.
@@ -125,11 +131,14 @@ Cleaning rules:
 - Amounts typed as text with a decimal comma (`77,5`) are read as 77.5. Power BI reads them as 775,
   which puts its February 2026 total $702 higher. **Data notes** at the bottom of the page lists
   every such cell.
+- **Top 15 Products By Units Bought** ranks products by units. Power BI's chart picks the top 15
+  products by cash and then sorts them by units, so it leaves out products with many low-priced units,
+  such as Dollar Stamp and Meters.
 
 ## Next steps
 
-- The remaining pages: Insights, Mail Order, Electronics, Vendors & Products, Demographics, Cancelled,
-  Call Report and Mail Details.
+- The remaining pages: Mail Order, Electronics, Vendors & Products, Demographics, Cancelled, Call
+  Report and Mail Details.
 
 ## Built with
 

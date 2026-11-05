@@ -4,44 +4,44 @@
   'use strict';
   const F = CN.fmt;
   const $ = id => document.getElementById(id);
-  const VIEWS = ['welcome', 'pickups', 'details', 'drivers', 'drv-details'];
-  // menu item of each view
-  const NAV = { pickups: 'nav-pickups', details: 'nav-pickups', drivers: 'nav-drivers', 'drv-details': 'nav-drivers' };
+  const SECTIONS = ['welcome', 'pickups', 'details', 'drivers', 'drv-details', 'insights']; // #view-…
+  const MENU = ['nav-pickups', 'nav-drivers', 'nav-insights'];
+  // Each address path: the section it shows, its menu item, and the page module that fills it.
+  const PATHS = {
+    pickups: { section: 'pickups', menu: 'nav-pickups', show: p => CN.pickups.show('pickups', p) },
+    'pickups/details': { section: 'details', menu: 'nav-pickups', show: p => CN.pickups.show('details', p) },
+    drivers: { section: 'drivers', menu: 'nav-drivers', show: p => CN.drivers.show(p, 'drivers') },
+    'drivers/details': { section: 'drv-details', menu: 'nav-drivers', show: p => CN.drivers.show(p, 'details') },
+    insights: { section: 'insights', menu: 'nav-insights', show: p => CN.insights.show(p, 'insights') },
+    // Insights lists its pick-ups in the Pick Up Detail table.
+    'insights/details': { section: 'details', menu: 'nav-insights', show: p => CN.insights.show(p, 'details') },
+  };
   // { name, source: 'google' | 'file', sheets, pickups, payouts (or null), payoutsProblem, loadedAt }
   let book = null;
 
   const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
   const esc = s => String(s).replace(/[&<>"']/g, c => ESC[c]);
 
-  function showView(name) {
-    VIEWS.forEach(v => { $('view-' + v).hidden = v !== name; });
-    document.body.dataset.view = name;
-    for (const id of new Set(Object.values(NAV))) {
-      const on = NAV[name] === id;
-      $(id).classList.toggle('active', on);
-      if (on) $(id).setAttribute('aria-current', 'page');
+  function showView(section, menu) {
+    SECTIONS.forEach(s => { $('view-' + s).hidden = s !== section; });
+    document.body.dataset.view = section;
+    for (const id of MENU) {
+      $(id).classList.toggle('active', id === menu);
+      if (id === menu) $(id).setAttribute('aria-current', 'page');
       else $(id).removeAttribute('aria-current');
     }
   }
 
-  // #/pickups?..., #/pickups/details?..., #/drivers?... or #/drivers/details?...; the query holds the
-  // page's filters.
+  // #/<page>?... or #/<page>/details?... (see PATHS); the query holds the page's filters.
   function route() {
     if (!book) {
       showView('welcome');
       return;
     }
     const [path, query] = location.hash.replace(/^#\/?/, '').split('?');
-    const params = new URLSearchParams(query || '');
-    if (path === 'drivers' || path === 'drivers/details') {
-      const details = path === 'drivers/details';
-      showView(details ? 'drv-details' : 'drivers');
-      CN.drivers.show(params, details ? 'details' : 'drivers');
-      return;
-    }
-    const view = path === 'pickups/details' ? 'details' : 'pickups';
-    showView(view);
-    CN.pickups.show(view, params);
+    const target = PATHS[path] || PATHS.pickups;
+    showView(target.section, target.menu);
+    target.show(new URLSearchParams(query || ''));
   }
 
   function busy(text) {
@@ -73,9 +73,10 @@
     book = Object.assign(loaded, { loadedAt: new Date() });
     CN.pickups.load(book.pickups);
     CN.drivers.load(book);
+    CN.insights.load(book);
     clearErrors();
     renderStatus();
-    if (!/^#\/(pickups|drivers)/.test(location.hash)) history.replaceState(null, '', '#/pickups');
+    if (!PATHS[location.hash.replace(/^#\/?/, '').split('?')[0]]) history.replaceState(null, '', '#/pickups');
     route();
   }
 
@@ -225,6 +226,7 @@
     }
     CN.pickups.init();
     CN.drivers.init();
+    CN.insights.init();
     setUpStart();
     const pick = () => $('file-input').click();
     for (const id of ['open-file', 'open-file-alt', 'status-open']) $(id).addEventListener('click', pick);

@@ -18,8 +18,10 @@
 <script defer src="js/config.js"></script>
 <script defer src="js/google.js"></script>
 <script defer src="js/ranges.js"></script>
+<script defer src="js/charts.js"></script>
 <script defer src="js/pickups.js"></script>
 <script defer src="js/drivers.js"></script>
+<script defer src="js/insights.js"></script>
 <script defer src="js/app.js"></script>
 </head>
 <body data-view="welcome">
@@ -35,7 +37,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 15.5V9.5h9V7h4.2l3.3 4.2 2.5.8v3.5"/><circle cx="6.5" cy="16.5" r="1.8"/><circle cx="17" cy="16.5" r="1.8"/></svg>
         <span>Drivers</span>
       </a>
-      <a class="nav-item" aria-disabled="true" title="Coming soon">
+      <a class="nav-item" id="nav-insights" href="#/insights">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 15.5V9.5h9V7h4.2l3.3 4.2 2.5.8v3.5"/><circle cx="6.5" cy="16.5" r="1.8"/><circle cx="17" cy="16.5" r="1.8"/></svg>
         <span>Insights</span>
       </a>
@@ -163,7 +165,7 @@
           <label class="field-label" for="drv-preset">Range</label>
           <select class="control" id="drv-preset"></select>
         </div>
-        <div class="kpi kpi-inline"><div class="kpi-value" id="drv-total">–</div><div class="kpi-label">Total Driver Payouts</div></div>
+        <div class="kpi kpi-inline toolbar-end"><div class="kpi-value" id="drv-total">–</div><div class="kpi-label">Total Driver Payouts</div></div>
         <button type="button" class="details-btn details-inline" id="drv-details-btn">Details</button>
       </header>
       <div class="selection selection-row" id="drv-selection" hidden>
@@ -171,7 +173,7 @@
         <button type="button" id="drv-clear">Clear</button>
       </div>
       <p class="drv-problem" id="drv-problem" role="status" hidden></p>
-      <div class="drv-grid">
+      <div class="chart-grid">
         <section class="chart-card">
           <h2>Cash Spent by Driver</h2>
           <div class="chart-scroll"><div class="chart" id="chart-drv-cash" role="img" aria-label="Cash each driver handed out, largest first. Click a driver to see their payouts."></div></div>
@@ -187,6 +189,47 @@
         <section class="chart-card" id="drv-card-bonus">
           <h2>Type of Bonuses</h2>
           <div class="chart chart-pie" id="chart-drv-bonus" role="img" aria-label="Bonus payouts by type. Click a type to filter the other payout charts."></div>
+        </section>
+      </div>
+    </section>
+
+    <section class="view" id="view-insights" hidden>
+      <header class="toolbar">
+        <img class="logo" src="assets/cashmoney-logo.png" alt="Cash Money Test Strips" width="216" height="62">
+        <div class="field">
+          <span class="field-label">Date</span>
+          <div class="date-range">
+            <input class="control" type="date" id="ins-from" aria-label="From">
+            <span aria-hidden="true">–</span>
+            <input class="control" type="date" id="ins-to" aria-label="To">
+          </div>
+        </div>
+        <div class="field">
+          <label class="field-label" for="ins-preset">Range</label>
+          <select class="control" id="ins-preset"></select>
+        </div>
+        <button type="button" class="details-btn details-inline toolbar-end" id="ins-details-btn">Details</button>
+      </header>
+      <div class="selection selection-row" id="ins-selection" hidden>
+        <span>Showing <b id="ins-selection-label"></b></span>
+        <button type="button" id="ins-clear">Clear</button>
+      </div>
+      <div class="chart-grid">
+        <section class="chart-card">
+          <h2>Top 15 Products By Cash Spent</h2>
+          <div class="chart-scroll"><div class="chart" id="chart-ins-cash" role="img" aria-label="The 15 products with the most cash spent, largest first. Click a product to filter the other charts."></div></div>
+        </section>
+        <section class="chart-card">
+          <h2>Top 15 Products By Units Bought</h2>
+          <div class="chart-scroll"><div class="chart" id="chart-ins-units" role="img" aria-label="The 15 products with the most units bought, largest first. Click a product to filter the other charts."></div></div>
+        </section>
+        <section class="chart-card">
+          <h2>Top 10 Vendors</h2>
+          <div class="chart-scroll"><div class="chart" id="chart-ins-vendors" role="img" aria-label="The 10 vendors paid the most cash, largest first. Click a vendor to filter the other charts."></div></div>
+        </section>
+        <section class="chart-card">
+          <h2>Cash Spent By Category</h2>
+          <div class="chart-scroll"><div class="chart" id="chart-ins-category" role="img" aria-label="Cash spent on each product category, largest first. Click a category to filter the other charts."></div></div>
         </section>
       </div>
     </section>

@@ -6,13 +6,11 @@
   'use strict';
   const F = CN.fmt;
   const $ = id => document.getElementById(id);
-  const INK = '#252423', MUTED = '#6e5a6b';
-  const BAR = '#e044a7';
+  const { INK, esc, hint } = CN.charts;
   // Category colors in a fixed order, checked for color-blind separation. A category keeps its
   // color whatever is filtered; past seven categories the rest share "Other".
   const COLORS = ['#8e3fa3', '#e044a7', '#c8a200', '#118dff', '#e66c37', '#744ec2', '#1aab40'];
   const GRAY = '#a59aa3';
-  const BAR_ROW = 26; // px per bar; long driver lists scroll inside their card
   const KINDS = ['driver', 'concept', 'bonus']; // what can be selected, and its address parameter
   const PRESETS = CN.ranges.PRESETS;
   const PAGE = 500; // detail rows added per "Show more"
@@ -26,11 +24,8 @@
   const S = { preset: 'last4', from: 0, to: 0, sel: null }; // sel: { kind, key, label }
   const D = { rows: [], sort: 'day', dir: 1, shown: 0 };
 
-  const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-  const esc = s => String(s).replace(/[&<>"']/g, c => ESC[c]);
   const lower = s => s.toLowerCase();
   const pct = x => (x * 100).toFixed(1) + '%';
-  const hint = text => `<br><span style="color:#8a7a88">${text}</span>`;
   const presetRange = id => CN.ranges.range(id, first, last);
 
   // Lowercased names to match the selection on, and each category's color slot.
@@ -135,10 +130,10 @@
     $('drv-selection').hidden = !S.sel;
     if (S.sel) $('drv-selection-label').textContent = selectionPhrase();
     const sel = kind => (S.sel && S.sel.kind === kind ? S.sel.key : null);
-    setBars(charts.cash, r.cash, sel('driver'), 'No pick-ups in this date range', "Click to see this driver's payouts");
+    CN.charts.bars(charts.cash, r.cash, { selKey: sel('driver'), empty: 'No pick-ups in this date range', hint: "Click to see this driver's payouts" });
     if (Q) {
       narrowPies = charts.concept.getWidth() < 420;
-      setBars(charts.payouts, r.payouts, sel('driver'), emptyPhrase('payouts'), 'Click to filter the payout charts');
+      CN.charts.bars(charts.payouts, r.payouts, { selKey: sel('driver'), empty: emptyPhrase('payouts'), hint: 'Click to filter the payout charts' });
       setPie(charts.concept, r.concepts, sel('concept'), false, emptyPhrase('payouts'));
       setPie(charts.bonus, r.bonuses, sel('bonus'), true, emptyPhrase('bonuses'));
     }
@@ -163,45 +158,10 @@
     $('drv-preset').value = S.preset;
   }
 
-  const emptyOption = text => ({
-    graphic: { type: 'text', left: 'center', top: 'middle', style: { text, fill: MUTED, fontSize: 13 } },
-  });
-
-  // Horizontal bars, one per driver, tall enough for every name; the card scrolls past its height.
-  function setBars(chart, items, selKey, emptyText, clickHint) {
-    chart.getDom().style.height = Math.max(160, items.length * BAR_ROW + 12) + 'px';
-    chart.resize();
-    if (!items.length) {
-      chart.setOption(emptyOption(emptyText), true);
-      return;
-    }
-    const dim = selKey !== null;
-    chart.setOption({
-      animationDuration: 300,
-      grid: { left: 6, right: 92, top: 4, bottom: 4, containLabel: true },
-      tooltip: {
-        trigger: 'item',
-        formatter: p => `${esc(p.name)}<br><b>${F.money(p.value)}</b>` + hint(items[p.dataIndex].key === selKey ? 'Click again to clear' : clickHint),
-      },
-      xAxis: { type: 'value', show: false, max: 'dataMax' },
-      yAxis: {
-        type: 'category', inverse: true, data: items.map(it => it.label),
-        axisTick: { show: false }, axisLine: { show: false },
-        axisLabel: { color: INK, fontSize: 12, fontWeight: 600, width: 130, overflow: 'truncate' },
-      },
-      series: [{
-        type: 'bar', barMaxWidth: 18, cursor: 'pointer',
-        data: items.map(it => ({ value: it.value, itemStyle: { opacity: !dim || it.key === selKey ? 1 : 0.3 } })),
-        itemStyle: { color: BAR, borderRadius: [0, 4, 4, 0] },
-        label: { show: true, position: 'right', color: INK, fontSize: 12, formatter: p => F.money(p.value) },
-      }],
-    }, true);
-  }
-
   // Pie or donut with each slice's name and share beside it, and a legend that also gives the amounts.
   function setPie(chart, items, selKey, donut, emptyText) {
     if (!items.length) {
-      chart.setOption(emptyOption(emptyText), true);
+      chart.setOption(CN.charts.empty(emptyText), true);
       return;
     }
     const sum = items.reduce((s, it) => s + it.value, 0);

@@ -212,7 +212,8 @@
       t.h = head.findIndex(r => r.some(v => v !== ''));
       try {
         if (t.h < 0) throw new DataError(`The "${t.sheet}" sheet has nothing in its first 20 rows.`);
-        t.cols = Object.values(t.columns(head[t.h], t.sheet)).map(c => columnLetters(c));
+        // An optional column that isn't in the sheet is -1, and isn't asked for.
+        t.cols = Object.values(t.columns(head[t.h], t.sheet)).filter(c => c >= 0).map(c => columnLetters(c));
       } catch (err) {
         if (i === 0 || !(err instanceof DataError)) throw err;
         t.problem = err; // the Drivers page says why it has no payouts

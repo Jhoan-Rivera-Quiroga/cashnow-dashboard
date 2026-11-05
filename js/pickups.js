@@ -312,7 +312,7 @@
   }
 
   function saveHash() {
-    const url = `#/${view === 'details' ? 'pickups/details' : 'pickups'}?${toParams()}`;
+    const url = `#/pickups?${toParams()}`;
     if (location.hash === url) return;
     try { history.replaceState(null, '', url); } catch (e) { /* some browsers refuse this on file:// pages */ }
   }
@@ -322,16 +322,33 @@
   const collator = new Intl.Collator('en', { sensitivity: 'base' });
   const TEXT_COLS = new Set(['order', 'vendor', 'city', 'product']);
   const TIE_ORDER = ['day', 'order', 'vendor', 'city', 'product'];
+  // What the table lists, and where Back and the CSV name point: { match(i), phrase, hash, back,
+  // backLabel, file }. The Insights page opens the same table for its own selection.
+  let listed = null;
+
+  // The Pick Ups page's own drill-through: its date range, states and selected point.
+  function pickupsDetail() {
+    const bucket = P.bucket[S.g];
+    const scope = S.sel !== null ? F.iso(S.sel) : `${F.iso(S.from)}_to_${F.iso(S.to)}`;
+    return {
+      match: i => inScope(i) && (S.sel === null || bucket[i] === S.sel),
+      phrase: `${scopePhrase()} · State: ${stateSummary()}`,
+      hash: `#/pickups/details?${toParams()}`,
+      back: `#/pickups?${toParams()}`,
+      backLabel: 'Back to Pick Ups',
+      file: `pick-up-detail_${scope}.csv`,
+    };
+  }
 
   // One row per date, order, vendor, city and product, with units and cash summed,
   // like the Power BI table.
-  function renderDetails() {
-    const bucket = P.bucket[S.g];
+  function detail(opts) {
+    listed = opts;
     const groups = new Map();
     const orders = new Set();
     let units = 0, cash = 0;
     for (let i = 0; i < P.n; i++) {
-      if (!inScope(i) || (S.sel !== null && bucket[i] !== S.sel)) continue;
+      if (!opts.match(i)) continue;
       const k = `${P.day[i]}|${P.order[i]}|${P.vendor[i]}|${P.city[i]}|${P.product[i]}`;
       let r = groups.get(k);
       if (!r) {
@@ -348,13 +365,15 @@
     }
     D.rows = [...groups.values()];
     sortRows();
-    $('details-context').textContent =
-      `${scopePhrase()} · State: ${stateSummary()} · ${F.int(orders.size)} pick-ups · ${F.int(D.rows.length)} rows`;
+    $('details-context').textContent = `${opts.phrase} · ${F.int(orders.size)} pick-ups · ${F.int(D.rows.length)} rows`;
     $('details-units').textContent = F.num(units);
     $('details-cash').textContent = F.money(cash);
     $('details-export').disabled = !D.rows.length;
+    $('details-back').href = opts.back;
+    $('details-back').setAttribute('aria-label', opts.backLabel);
     redrawRows();
-    saveHash();
+    if (location.hash === opts.hash) return;
+    try { history.replaceState(null, '', opts.hash); } catch (e) { /* some browsers refuse this on file:// pages */ }
   }
 
   function sortRows() {
@@ -400,10 +419,9 @@
       lines.push([F.iso(r.day), F.csv(r.order), F.csv(r.vendor), F.csv(r.city), F.csv(r.product),
         r.units, r.cash.toFixed(2)].join(','));
     }
-    const scope = S.sel !== null ? F.iso(S.sel) : `${F.iso(S.from)}_to_${F.iso(S.to)}`;
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
-    a.download = `pick-up-detail_${scope}.csv`;
+    a.download = listed.file;
     document.body.append(a);
     a.click();
     a.remove();
@@ -449,13 +467,9 @@
     new ResizeObserver(fitKpis).observe(document.querySelector('.kpis'));
     $('clear-selection').addEventListener('click', () => { S.sel = null; render(); });
     document.addEventListener('keydown', e => {
-      if (e.key === 'Escape' && view === 'pickups' && S.sel !== null && P) { S.sel = null; render(); }
+      if (e.key === 'Escape' && document.body.dataset.view === 'pickups' && S.sel !== null && P) { S.sel = null; render(); }
     });
     $('details-btn').addEventListener('click', () => { location.hash = '#/pickups/details?' + toParams(); });
-    $('details-back').addEventListener('click', e => {
-      e.preventDefault();
-      location.hash = '#/pickups?' + toParams();
-    });
     $('details-more').addEventListener('click', showMoreRows);
     $('details-export').addEventListener('click', exportCsv);
     document.querySelectorAll('#details-table th[data-sort] button').forEach(b => b.addEventListener('click', () => {
@@ -483,7 +497,7 @@
     applyParams(params);
     syncStateChecks();
     if (v === 'details') {
-      renderDetails();
+      detail(pickupsDetail());
     } else {
       ensureCharts();
       render();
@@ -507,5 +521,5 @@
     };
   }
 
-  CN.pickups = { init, load, show, snapshot };
+  CN.pickups = { init, load, show, detail, snapshot };
 })(window.CashNow = window.CashNow || {});
