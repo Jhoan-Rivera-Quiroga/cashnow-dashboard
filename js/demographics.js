@@ -10,7 +10,7 @@
   const PRESETS = CN.ranges.PRESETS;
   const NAMES = { state: 'State', city: 'City' };
   const lower = s => s.toLowerCase();
-  const pct = x => (x * 100).toFixed(1) + '%';
+  const pct = F.pct;
 
   // The two halves. p: address parameter prefix; charts: one per field, `top` bars at most and the
   // rest as "Other". data, keys, S and the ECharts instances are filled in by load() and show().

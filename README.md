@@ -5,8 +5,8 @@ browser, so it can be hosted for free on GitHub Pages with no server.
 
 So far it has the **Pick Ups** page with its **Pick Up Detail** drill-through, the **Drivers** and
 **Insights** pages, the **Mail Order** page with its **Mail Details** drill-through, and the
-**Electronics**, **Vendors & Products** and **Demographics** pages. The other pages are listed in the
-menu and come next.
+**Electronics**, **Vendors & Products**, **Demographics** and **Cancelled** pages. The **Call Report**
+page is listed in the menu and comes next.
 
 ## Your data stays out of this repository
 
@@ -79,6 +79,14 @@ orders by state. Power BI's maps on this page don't draw, and its city pie has a
 this page uses bars with each one's share. Clicking a state or a city filters its half, and each
 half's **Details** lists the pick-ups or mail orders behind it.
 
+The **Cancelled** page lists the cancelled pick-ups in its date range, why they were cancelled, and
+whether someone followed up. Power BI's page has the **Total Cancelled Pick Ups** card and a table.
+This page adds the **Excluding Duplicates & Tests** card (about a fifth of the rows are duplicate
+entries) and the **Follow Up Rate** card, and charts of the reasons and of the follow-up status, as
+the report's spec suggests. Clicking a reason or a status filters the cards, the other chart and the
+table. The table shows each seller's name and phone number in separate columns, sorts by any column
+and downloads as CSV.
+
 ## Setting up Google sign-in
 
 This is done once, in a Google Cloud project:
@@ -138,7 +146,9 @@ Drivers page also reads the **Driver Payouts** sheet: `Date`,
 sheet: `Delivery Date`, `Delivery Order (D.O.) No.`, `First Name`, `Product Code / Name`, `Quantity`,
 `Total`, `Order Qty`, and `Sales Person` and `State` when they're there. The Electronics page reads the
 **Electronics** sheet: `Collection Date`, `First Name`, `Marketing Name`, `Quantity` and `Comments`
-(the amount paid). Without any of these three sheets, the other pages still work.
+(the amount paid). The Cancelled page reads the **Return** sheet: `Collection Date`, `First Name`,
+`Reason and Follow up Steps`, `Follow Up Status`, and `Customer's Phone No.` when it's there. Without
+any of these sheets, the other pages still work.
 From Google Sheets the dashboard downloads only those columns. If a column is renamed, the page names
 the missing one.
 
@@ -153,6 +163,34 @@ the missing one.
 | Total Orders Completed | Sum of `Order Qty`, which the sheet keeps on a row of its own for each day |
 | Top Mail Vendor | `First Name` with the most mail cash spent in the current view |
 | Total Paid (electronics) | Sum of `Comments` on the Electronics sheet; Devices Bought is the sum of `Quantity` |
+| Total Cancelled Pick Ups | Count of the Return sheet's rows with a `Collection Date` in the range, as in Power BI |
+| Excluding Duplicates & Tests | Total Cancelled Pick Ups minus the reasons in the Duplicate and Test or training groups |
+| Follow Up Rate | Follow Up Done ÷ the cancellations that needed a follow-up (every status but No Need for Follow Up). A blank status counts as not followed up |
+
+The Return sheet's reasons are typed freely, in hundreds of spellings, so the Cancelled page's chart
+groups them by their words. Each reason goes in the first group it matches, and the table shows it as
+typed:
+
+| Group | A reason that has… |
+|---|---|
+| Duplicate | "dup" (duplicate, duplicated) |
+| Test or training | only "test" or "testing", "test" at the end, or "training" |
+| No show or no answer | no show, no answer, not answering, not responding, unresponsive, didn't show, couldn't reach, voicemail |
+| Sold elsewhere | sold, competitor, another company |
+| Price not accepted | price, pricing, too low, low value |
+| Item problems | damaged, broken, seal, opened, expired, invalid, wrong item or box, short dated, stained, dinged, bad box, "don't take" |
+| No items yet | no items or supplies, not ready, not available, when ready |
+| Customer cancelled | cancel (any spelling), cax, changed their mind |
+| Rescheduled | reschedule, later, another day, next day or week, postponed |
+| Not confirmed | confirm |
+| Mail instead | mail, ship |
+
+A reason that's only a time slot or the booking form's wording ("Scheduled time: 5:30 - 6:30 pm",
+"Local pickup - same-day …") is **Time slot, no reason**, an empty one is **(Blank)**, and the rest
+are **Other**. The follow-up statuses typed different ways count as one: **Follow Up Done** (done or
+completed), **No Need for Follow Up** (starting with "no" and saying "need"), **Follow Up Pending** and
+**Couldn't Contact**. Any other status is shown as typed. The rules are at the top of
+`js/cancelled.js`.
 
 Cleaning rules:
 
@@ -172,10 +210,15 @@ Cleaning rules:
   its total for December 2025 is $11,183 against $5,922 actually paid.
 - The Electronics table shows each sale's date. Power BI's table shows only the year, which merges a
   seller's sales of the same model within a year into one row.
+- On the Return sheet, `First Name` holds the seller's name and phone number together. The Cancelled
+  table shows them in two columns, with the phone from `Customer's Phone No.` when it's filled in and
+  from `First Name` otherwise. Power BI's table shows `First Name` as typed and the statuses as typed,
+  sorted by reason; this table adds the date and starts sorted by it.
+- A time typed as a reason (the sheet turns "1:00 PM" into a time value) is shown as a time.
 
 ## Next steps
 
-- The remaining pages: Cancelled and Call Report.
+- The remaining page: Call Report.
 
 ## Built with
 

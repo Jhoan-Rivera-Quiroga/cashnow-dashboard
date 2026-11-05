@@ -160,6 +160,9 @@ body[data-view="details"] .main, body[data-view="drv-details"] .main { backgroun
 .chart-scroll { max-height: clamp(260px, 46vh, 420px); overflow-y: auto; overscroll-behavior: contain; }
 .chart-scroll .chart { height: 160px; }
 .chart-pie { height: clamp(260px, 46vh, 420px); }
+/* Cancelled: how a chart is worked out, under its title; long reasons wrap in the table */
+.chart-note { margin: 2px 0 6px; color: var(--muted); font-size: 12px; text-align: center; }
+.detail-table td.wrap { min-width: 240px; white-space: normal; }
 
 /* Welcome */
 .welcome { display: grid; flex: 1; place-items: center; }

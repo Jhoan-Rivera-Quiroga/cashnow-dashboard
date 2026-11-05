@@ -24,7 +24,7 @@
   let table = null; // the Driver Payout Detail table
 
   const lower = s => s.toLowerCase();
-  const pct = x => (x * 100).toFixed(1) + '%';
+  const pct = F.pct;
   const presetRange = id => CN.ranges.range(id, first, last);
 
   // Lowercased names to match the selection on, and each category's color slot.
@@ -158,6 +158,7 @@
     const byName = new Map(items.map(it => [it.label, it]));
     chart.setOption({
       animationDuration: 300,
+      textStyle: { fontFamily: CN.charts.font() },
       tooltip: {
         trigger: 'item',
         formatter: p => {

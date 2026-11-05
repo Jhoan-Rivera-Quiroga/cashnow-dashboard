@@ -1,5 +1,6 @@
-/* Turns the Collection and Driver Payouts tables into clean columns, from a workbook file (read
-   with SheetJS) or from rows that js/google.js reads from Google Sheets. */
+/* Turns the Collection sheet and the optional sheets (Driver Payouts, Mail_Order, Electronics,
+   Return) into clean columns, from a workbook file (read with SheetJS) or from rows that
+   js/google.js reads from Google Sheets. */
 (function (CN) {
   'use strict';
   const F = CN.fmt;
@@ -55,6 +56,15 @@
     amount: 'Comments', // holds the price paid, as on the Collection sheet
   };
 
+  // Columns the Cancelled page reads: one row per cancelled pick-up, with no amount. First Name holds
+  // the seller's name and phone number together.
+  const CANCELLED_COLUMNS = {
+    date: 'Collection Date',
+    name: 'First Name',
+    reason: 'Reason and Follow up Steps',
+    status: 'Follow Up Status',
+  };
+
   // An optional sheet and how to read it with readTable.
   const optional = (field, name, table) => ({
     field, name,
@@ -73,6 +83,10 @@
       countRow: (row, col) => cleanText(row[col.amount]) === null && cleanText(row[col.orders]) !== null,
     }),
     optional('electronics', 'Electronics', { columns: ELECTRONICS_COLUMNS, text: ['vendor', 'model'], numbers: ['units'] }),
+    optional('cancelled', 'Return', {
+      columns: CANCELLED_COLUMNS, optional: { phone: "Customer's Phone No." },
+      text: ['name', 'phone', 'reason', 'status'], cells: { reason: dateTimeText },
+    }),
   ];
 
   const key = s => String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -112,6 +126,15 @@
     const s = F.fromYmd(y, m, d);
     const t = F.toDate(s);
     return t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d ? s : null;
+  }
+
+  // A date or time in a text column, as text: Excel and Google Sheets turn a typed "1:00 PM" into a
+  // time, which arrives as a number. Other values pass through.
+  function dateTimeText(v, offset) {
+    if (typeof v !== 'number' || !(v >= 0)) return v;
+    const day = Math.floor(v), mins = Math.min(1439, Math.round((v - day) * 1440));
+    const time = mins ? `${((Math.floor(mins / 60) + 11) % 12) + 1}:${String(mins % 60).padStart(2, '0')} ${mins < 720 ? 'AM' : 'PM'}` : '';
+    return [day >= 1 ? F.iso(day + offset) : '', time].filter(Boolean).join(' ') || '12:00 AM';
   }
 
   const newNotes = () => ({ commaDecimals: [], badDates: [], noDate: 0, badAmounts: [], noAmount: 0 });
@@ -292,15 +315,18 @@
   }
 
   // An optional sheet's table (see OPTIONAL_SHEETS); rows as for readPickups. t: { columns, optional,
-  // text (fields grouped by name, like the Pick Ups names), numbers (read as numbers, 0 when blank),
-  // countRow(row, col) (rows that rightly have no amount), buckets (add each row's week and month) }.
-  // The amount column's oddities go in Data notes.
+  // text (fields grouped by name, like the Pick Ups names), cells ({ field: (value, dateOffset) => value }
+  // to change a text field's raw cells first), numbers (read as numbers, 0 when blank), countRow(row,
+  // col) (rows that rightly have no amount), buckets (add each row's week and month) }. The amount
+  // column's oddities go in Data notes; a table without an amount column has amount null.
   function readTable(rows, firstRow, sheet, dateOffset, t) {
     const h = rows.findIndex(r => r.some(v => v != null));
     if (h < 0) throw new DataError(`The "${sheet}" sheet is empty.`);
     const col = findColumns(t.columns, rows[h], sheet, t.optional);
     const used = Object.values(col).filter(c => c >= 0);
-    const numbers = t.numbers || [];
+    const numbers = t.numbers || [], cells = t.cells || {};
+    const hasAmount = 'amount' in t.columns;
+    const text = (f, v) => cleanText(cells[f] ? cells[f](v, dateOffset) : v);
 
     const cap = rows.length - h - 1;
     const day = new Int32Array(cap), amount = new Float64Array(cap);
@@ -320,8 +346,8 @@
         if (d > maxDay) maxDay = d;
       }
       day[n] = d;
-      for (const f of t.text) codes[f][n] = dicts[f].code(cleanText(row[col[f]]));
-      amount[n] = t.countRow && t.countRow(row, col) ? 0 : readAmount(row[col.amount], d, notes, excelRow);
+      for (const f of t.text) codes[f][n] = dicts[f].code(col[f] >= 0 ? text(f, row[col[f]]) : null);
+      if (hasAmount) amount[n] = t.countRow && t.countRow(row, col) ? 0 : readAmount(row[col.amount], d, notes, excelRow);
       for (const f of numbers) {
         const v = toNumber(row[col[f]]);
         nums[f][n] = Number.isNaN(v) ? 0 : v;
@@ -332,7 +358,7 @@
     const dated = Number.isFinite(minDay);
     const out = {
       sheet, n, notes, minDay: dated ? minDay : null, maxDay: dated ? maxDay : null,
-      day: day.subarray(0, n), amount: amount.subarray(0, n), labels: {}, has: {},
+      day: day.subarray(0, n), amount: hasAmount ? amount.subarray(0, n) : null, labels: {}, has: {},
     };
     for (const f of numbers) out[f] = nums[f].subarray(0, n);
     for (const f of t.text) {

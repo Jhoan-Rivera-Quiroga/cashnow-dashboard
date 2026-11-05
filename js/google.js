@@ -192,7 +192,7 @@
     return rows;
   }
 
-  // Reads the Collection sheet, and each optional sheet (Driver Payouts, Mail_Order) that's there.
+  // Reads the Collection sheet, and each optional sheet (CN.data.OPTIONAL_SHEETS) that's there.
   // Only the columns the dashboard uses are downloaded.
   async function readSheet(id, accessToken) {
     const base = encodeURIComponent(id);

@@ -6,13 +6,18 @@
   const INK = '#252423', MUTED = '#6e5a6b';
   const BAR = '#e044a7', LINE = '#6b007b';
   const ROW = 26; // px per bar; a long list scrolls inside its card
+  // The page's font, for chart text too. Without a font on the labels, ECharts sizes the bar charts'
+  // label column for one font but draws in another (Microsoft YaHei on Windows, which is wider), so
+  // the longest labels lost their first letters.
+  let font = null;
+  const FONT = () => font || (font = getComputedStyle(document.body).fontFamily || 'sans-serif');
 
   const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
   const esc = s => String(s).replace(/[&<>"']/g, c => ESC[c]);
   const hint = text => `<br><span style="color:#8a7a88">${text}</span>`;
 
   const empty = text => ({
-    graphic: { type: 'text', left: 'center', top: 'middle', style: { text, fill: MUTED, fontSize: 13 } },
+    graphic: { type: 'text', left: 'center', top: 'middle', style: { text, fill: MUTED, fontSize: 13, fontFamily: FONT() } },
   });
 
   // Bar items for every code with an amount, largest first, at most n of them.
@@ -39,6 +44,7 @@
     const selKey = opts.selKey === undefined ? null : opts.selKey;
     chart.setOption({
       animationDuration: 300,
+      textStyle: { fontFamily: FONT() },
       grid: { left: 6, right: opts.labelRoom || 92, top: 4, bottom: 4, containLabel: true },
       tooltip: {
         trigger: 'item',
@@ -52,7 +58,7 @@
       yAxis: {
         type: 'category', inverse: true, data: items.map(it => it.label),
         axisTick: { show: false }, axisLine: { show: false },
-        axisLabel: { color: INK, fontSize: 12, fontWeight: 600, width: 150, overflow: 'truncate' },
+        axisLabel: { color: INK, fontSize: 12, fontWeight: 600, fontFamily: FONT(), width: 150, overflow: 'truncate' },
       },
       series: [{
         type: 'bar', barMaxWidth: 18, cursor: 'pointer',
@@ -74,6 +80,7 @@
     const valueLabel = v => (inK && Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + 'K' : F.int(v));
     chart.setOption({
       animationDuration: 300,
+      textStyle: { fontFamily: FONT() },
       grid: { left: 52, right: 30, top: 34, bottom: 28 },
       tooltip: {
         trigger: 'axis',
@@ -148,5 +155,5 @@
     });
   }
 
-  CN.charts = { ranked, bars, line, pointAt, fitKpis, empty, esc, hint, INK, MUTED };
+  CN.charts = { ranked, bars, line, pointAt, fitKpis, empty, esc, hint, font: FONT, INK, MUTED };
 })(window.CashNow = window.CashNow || {});

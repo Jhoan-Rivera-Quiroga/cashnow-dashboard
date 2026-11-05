@@ -50,6 +50,7 @@
     count: (n, one, many) => `${intFmt.format(n)} ${n === 1 ? one : many}`, // 1 row, 2 rows
     num: n => numFmt.format(n),
     money: n => moneyFmt.format(n),
+    pct: x => (x * 100).toFixed(1) + '%', // 0.2072 -> 20.7%
     dayShort: s => dayShortFmt.format(toDate(s)), // Mar 08
     dayLong: s => dayLongFmt.format(toDate(s)), // Mar 8, 2026
     month: s => monthFmt.format(toDate(s)), // Mar 2026

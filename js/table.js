@@ -11,15 +11,15 @@
   const csv = { day: F.iso, text: F.csv, num: String, money: v => v.toFixed(2) };
 
   // ids: { table, more } (the <table> and its "Show more" button). cols: [{ key, label, type:
-  // 'day' | 'text' | 'num' | 'money' }]. Rows are sorted by the first column until a header is clicked,
-  // and ties go by the text and date columns in order.
+  // 'day' | 'text' | 'num' | 'money', wrap (long text that wraps onto more lines) }]. Rows are sorted by
+  // the first column until a header is clicked, and ties go by the text and date columns in order.
   function create(ids, cols) {
     const table = document.getElementById(ids.table), more = document.getElementById(ids.more);
     const T = { rows: [], sort: cols[0].key, dir: 1, shown: 0 };
     const type = Object.fromEntries(cols.map(c => [c.key, c.type]));
     const tie = cols.filter(c => !NUMBERS.has(c.type)).map(c => c.key);
     const firstNumber = cols.findIndex(c => NUMBERS.has(c.type));
-    const cls = c => (NUMBERS.has(c.type) ? ' class="num"' : '');
+    const cls = c => (NUMBERS.has(c.type) ? ' class="num"' : c.wrap ? ' class="wrap"' : '');
 
     table.innerHTML = '<thead><tr>' +
       cols.map(c => `<th data-sort="${c.key}" aria-sort="none"${cls(c)}><button type="button">${esc(c.label)}</button></th>`).join('') +
