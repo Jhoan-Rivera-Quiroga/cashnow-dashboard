@@ -280,7 +280,8 @@
       if (P.order[i] >= 0) orders.add(P.order[i]);
     }
     table.set([...groups.values()]);
-    $('details-context').textContent = `${opts.phrase} · ${F.int(orders.size)} pick-ups · ${F.int(table.length)} rows`;
+    $('details-context').textContent =
+      `${opts.phrase} · ${F.count(orders.size, 'pick-up', 'pick-ups')} · ${F.count(table.length, 'row', 'rows')}`;
     $('details-export').disabled = !table.length;
     $('details-back').href = opts.back;
     $('details-back').setAttribute('aria-label', opts.backLabel);

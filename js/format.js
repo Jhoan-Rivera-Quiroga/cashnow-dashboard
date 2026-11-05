@@ -47,6 +47,7 @@
   CN.fmt = {
     EPOCH, toDate, fromYmd, fromIso, iso, short, csv,
     int: n => intFmt.format(n),
+    count: (n, one, many) => `${intFmt.format(n)} ${n === 1 ? one : many}`, // 1 row, 2 rows
     num: n => numFmt.format(n),
     money: n => moneyFmt.format(n),
     dayShort: s => dayShortFmt.format(toDate(s)), // Mar 08

@@ -18,7 +18,6 @@
   let M = null, problem = null; // mail order rows from CN.data, or null and why there are none
   let charts = null, table = null;
   let last = null; // latest compute() result
-  let view = 'mail'; // or 'details'
   const S = { preset: 'last4', from: 0, to: 0, g: 'weekly', sel: null };
 
   const label = (field, code) => (code < 0 ? '' : M.labels[field][code]);
@@ -119,17 +118,45 @@
 
   /* ---------- Mail Details ---------- */
 
-  // The mail order lines behind the view: one row per date, order, vendor, product and sales person,
+  // What the table lists, and where Back and the CSV name point: { match(i), phrase, hash, back,
+  // backLabel, file, completed (count orders completed, as the Mail Order cards do, rather than
+  // order numbers) }. The Vendors & Products page opens the same table for its own selection.
+  let listed = null;
+
+  // The Mail Order page's own drill-through: its date range and selected point.
+  function mailDetail() {
+    const bucket = M.bucket[S.g];
+    const scope = S.sel !== null ? F.iso(S.sel) : `${F.iso(S.from)}_to_${F.iso(S.to)}`;
+    return {
+      match: i => inRange(i) && (S.sel === null || bucket[i] === S.sel),
+      phrase: scopePhrase(),
+      hash: `#/mail/details?${toParams()}`,
+      back: `#/mail?${toParams()}`,
+      backLabel: 'Back to Mail Order',
+      file: `mail-details_${scope}.csv`,
+      completed: true,
+    };
+  }
+
+  // The mail order lines behind a view: one row per date, order, vendor, product and sales person,
   // with quantities and cash summed. Power BI's table adds up Payment Amount instead, which repeats
   // an order's whole total on each of its lines.
-  function details() {
+  function detail(opts) {
+    listed = opts;
+    if (!M) {
+      table.set([]);
+      $('mail-details-context').textContent = problem;
+      $('mail-details-export').disabled = true;
+      return;
+    }
     const groups = new Map();
-    let orders = 0;
-    const bucket = M && M.bucket[S.g];
-    for (let i = 0; M && i < M.n; i++) {
-      if (!inRange(i) || (S.sel !== null && bucket[i] !== S.sel)) continue;
-      orders += M.orders[i];
+    const orders = new Set();
+    let completed = 0;
+    for (let i = 0; i < M.n; i++) {
+      if (!opts.match(i)) continue;
+      completed += M.orders[i];
       if (!isLine(i)) continue;
+      if (M.order[i] >= 0) orders.add(M.order[i]);
       const k = `${M.day[i]}|${M.order[i]}|${M.vendor[i]}|${M.product[i]}|${M.person[i]}`;
       let r = groups.get(k);
       if (!r) {
@@ -142,10 +169,13 @@
       r.cash += M.amount[i];
     }
     table.set([...groups.values()]);
-    $('mail-details-context').textContent = M
-      ? `${scopePhrase()} · ${F.int(orders)} orders completed · ${F.int(table.length)} rows` : problem;
+    const count = opts.completed ? F.count(completed, 'order completed', 'orders completed') : F.count(orders.size, 'order', 'orders');
+    $('mail-details-context').textContent = `${opts.phrase} · ${count} · ${F.count(table.length, 'row', 'rows')}`;
     $('mail-details-export').disabled = !table.length;
-    saveHash();
+    $('mail-details-back').href = opts.back;
+    $('mail-details-back').setAttribute('aria-label', opts.backLabel);
+    if (location.hash === opts.hash) return;
+    try { history.replaceState(null, '', opts.hash); } catch (e) { /* some browsers refuse this on file:// pages */ }
   }
 
   /* ---------- filters in the address, so a view can be bookmarked or shared ---------- */
@@ -178,7 +208,7 @@
   }
 
   function saveHash() {
-    const url = `#/${view === 'details' ? 'mail/details' : 'mail'}?${toParams()}`;
+    const url = `#/mail?${toParams()}`;
     if (location.hash === url) return;
     try { history.replaceState(null, '', url); } catch (e) { /* some browsers refuse this on file:// pages */ }
   }
@@ -216,15 +246,8 @@
     });
     new ResizeObserver(() => CN.charts.fitKpis($('view-mail'))).observe($('mail-kpis'));
     $('mail-details-btn').addEventListener('click', () => { location.hash = '#/mail/details?' + toParams(); });
-    $('mail-details-back').addEventListener('click', e => {
-      e.preventDefault();
-      location.hash = '#/mail?' + toParams();
-    });
     table = CN.table.create({ table: 'mail-details-table', more: 'mail-details-more' }, DETAIL_COLUMNS);
-    $('mail-details-export').addEventListener('click', () => {
-      const scope = S.sel !== null ? F.iso(S.sel) : `${F.iso(S.from)}_to_${F.iso(S.to)}`;
-      table.download(`mail-details_${scope}.csv`);
-    });
+    $('mail-details-export').addEventListener('click', () => table.download(listed.file));
   }
 
   function load(book) {
@@ -249,10 +272,9 @@
 
   // v: 'mail' for the charts, 'details' for the order lines behind them.
   function show(params, v) {
-    view = v;
     if (M) applyParams(params);
     if (v === 'details') {
-      details();
+      detail(M ? mailDetail() : {});
     } else if (M) {
       ensureCharts();
       render();
@@ -270,5 +292,5 @@
     };
   }
 
-  CN.mail = { init, load, show, snapshot };
+  CN.mail = { init, load, show, detail, snapshot };
 })(window.CashNow = window.CashNow || {});

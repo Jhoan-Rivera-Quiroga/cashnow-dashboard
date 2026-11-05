@@ -39,22 +39,14 @@
       if (okProduct && okVendor) categories[ca >= 0 ? ca : L.category.length] += a;
       if (okProduct && okVendor && okCategory) lines++;
     }
+    const top = CN.charts.ranked;
     return {
       cash: top(cash, L.product, 15),
       units: top(units, L.product, 15),
       vendors: top(vendors, L.vendor, 10),
-      categories: top(categories, [...L.category, '(Blank)'], Infinity),
+      categories: top(categories, [...L.category, '(Blank)']),
       lines,
     };
-  }
-
-  // The n largest, largest first.
-  function top(sums, labels, n) {
-    const out = [];
-    for (let c = 0; c < sums.length; c++) {
-      if (Math.abs(sums[c]) >= 0.005) out.push({ label: labels[c], key: lower(labels[c]), value: sums[c] });
-    }
-    return out.sort((a, b) => b.value - a.value).slice(0, n);
   }
 
   /* ---------- page ---------- */

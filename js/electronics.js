@@ -64,7 +64,7 @@
     CN.charts.bars(chart, models, { selKey: S.sel ? S.sel.key : null, empty: 'No electronics bought in this date range', hint: 'Click to filter the table' });
 
     table.set([...groups.values()]);
-    $('elec-context').textContent = [rangePhrase(), S.sel ? S.sel.label : '', `${F.int(table.length)} rows`].filter(Boolean).join(' · ');
+    $('elec-context').textContent = [rangePhrase(), S.sel ? S.sel.label : '', F.count(table.length, 'row', 'rows')].filter(Boolean).join(' · ');
     $('elec-export').disabled = !table.length;
     $('elec-selection').hidden = !S.sel;
     if (S.sel) $('elec-selection-label').textContent = S.sel.label;

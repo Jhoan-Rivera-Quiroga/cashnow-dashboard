@@ -15,6 +15,15 @@
     graphic: { type: 'text', left: 'center', top: 'middle', style: { text, fill: MUTED, fontSize: 13 } },
   });
 
+  // Bar items for every code with an amount, largest first, at most n of them.
+  function ranked(sums, labels, n = Infinity) {
+    const out = [];
+    for (let c = 0; c < sums.length; c++) {
+      if (Math.abs(sums[c]) >= 0.005) out.push({ label: labels[c], key: labels[c].toLowerCase(), value: sums[c] });
+    }
+    return out.sort((a, b) => b.value - a.value).slice(0, n);
+  }
+
   // One bar per item, largest first, each with its value; the chart is as tall as the list needs.
   // items: [{ label, key, value }]. opts: { selKey (highlighted, the rest dimmed), empty (message for
   // no items), hint (tooltip line), format (value text, money by default), unit (tooltip suffix) }.
@@ -135,5 +144,5 @@
     });
   }
 
-  CN.charts = { bars, line, pointAt, fitKpis, empty, esc, hint, INK, MUTED };
+  CN.charts = { ranked, bars, line, pointAt, fitKpis, empty, esc, hint, INK, MUTED };
 })(window.CashNow = window.CashNow || {});

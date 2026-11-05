@@ -5,7 +5,8 @@ browser, so it can be hosted for free on GitHub Pages with no server.
 
 So far it has the **Pick Ups** page with its **Pick Up Detail** drill-through, the **Drivers** and
 **Insights** pages, the **Mail Order** page with its **Mail Details** drill-through, and the
-**Electronics** page. The other pages are listed in the menu and come next.
+**Electronics** and **Vendors & Products** pages. The other pages are listed in the menu and come
+next.
 
 ## Your data stays out of this repository
 
@@ -67,6 +68,10 @@ model, quantity and amount paid, sortable and downloadable as CSV. Power BI's pa
 table. This page adds the **Devices Bought**, **Total Paid** and **Average per Device** cards and a
 **Paid by Model** chart, as the report's spec suggests. Clicking a model filters the cards and the
 table.
+
+The **Vendors & Products** page is the mail-order counterpart of Insights. It shows the top 10
+vendors and top 10 products by mail cash spent. Clicking a vendor or a product filters the other
+chart, and **Details** lists the order lines behind the view in the Mail Details table.
 
 ## Setting up Google sign-in
 
@@ -162,7 +167,7 @@ Cleaning rules:
 
 ## Next steps
 
-- The remaining pages: Vendors & Products, Demographics, Cancelled and Call Report.
+- The remaining pages: Demographics, Cancelled and Call Report.
 
 ## Built with
 

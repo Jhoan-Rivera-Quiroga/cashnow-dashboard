@@ -65,7 +65,7 @@
   function compute() {
     const cash = new Float64Array(P.labels.driver.length);
     for (let i = 0; i < P.n; i++) if (P.driver[i] >= 0 && inRange(P.day[i])) cash[P.driver[i]] += P.amount[i];
-    const r = { cash: bars(cash, P.labels.driver), total: null };
+    const r = { cash: CN.charts.ranked(cash, P.labels.driver), total: null };
     if (!Q) return r;
 
     const L = Q.labels;
@@ -84,21 +84,12 @@
         lines++;
       }
     }
-    r.payouts = bars(byDriver, L.driver);
+    r.payouts = CN.charts.ranked(byDriver, L.driver);
     r.concepts = slices(byConcept, c => (c < 0 ? '(Blank)' : L.concept[c]), K.concept, c => c);
     r.bonuses = slices(byBonus, c => (c < 0 ? '(Blank)' : L.note[c]), K.note, c => K.bonusSlot.get(c));
     r.total = total;
     r.lines = lines;
     return r;
-  }
-
-  // Bars for every driver with an amount, largest first.
-  function bars(sums, labels) {
-    const out = [];
-    for (let c = 0; c < sums.length; c++) {
-      if (Math.abs(sums[c]) >= 0.005) out.push({ label: labels[c], key: lower(labels[c]), value: sums[c] });
-    }
-    return out.sort((a, b) => b.value - a.value);
   }
 
   // Pie slices, largest first; categories past the seventh color slot are summed into "Other".
@@ -255,7 +246,7 @@
     }
     table.set([...groups.values()]);
     $('drv-details-context').textContent = Q
-      ? [rangePhrase(), S.sel ? selectionPhrase() : 'All payouts', `${F.int(table.length)} rows`].join(' · ')
+      ? [rangePhrase(), S.sel ? selectionPhrase() : 'All payouts', F.count(table.length, 'row', 'rows')].join(' · ')
       : problem;
     $('drv-details-export').disabled = !table.length;
     saveHash();

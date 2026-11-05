@@ -4,8 +4,9 @@
   'use strict';
   const F = CN.fmt;
   const $ = id => document.getElementById(id);
-  const SECTIONS = ['welcome', 'pickups', 'details', 'drivers', 'drv-details', 'insights', 'mail', 'mail-details', 'electronics']; // #view-…
-  const MENU = ['nav-pickups', 'nav-drivers', 'nav-insights', 'nav-mail', 'nav-electronics'];
+  const SECTIONS = ['welcome', 'pickups', 'details', 'drivers', 'drv-details', 'insights', 'mail', 'mail-details',
+    'electronics', 'vendors']; // #view-…
+  const MENU = ['nav-pickups', 'nav-drivers', 'nav-insights', 'nav-mail', 'nav-electronics', 'nav-vendors'];
   // Each address path: the section it shows, its menu item, and the page module that fills it.
   const PATHS = {
     pickups: { section: 'pickups', menu: 'nav-pickups', show: p => CN.pickups.show('pickups', p) },
@@ -18,6 +19,9 @@
     mail: { section: 'mail', menu: 'nav-mail', show: p => CN.mail.show(p, 'mail') },
     'mail/details': { section: 'mail-details', menu: 'nav-mail', show: p => CN.mail.show(p, 'details') },
     electronics: { section: 'electronics', menu: 'nav-electronics', show: p => CN.electronics.show(p) },
+    vendors: { section: 'vendors', menu: 'nav-vendors', show: p => CN.vendors.show(p, 'vendors') },
+    // Vendors & Products lists its order lines in the Mail Details table.
+    'vendors/details': { section: 'mail-details', menu: 'nav-vendors', show: p => CN.vendors.show(p, 'details') },
   };
   // { name, source: 'google' | 'file', sheets, pickups, payouts, mail and electronics (each null when
   // its sheet is missing or unreadable), payoutsProblem, mailProblem and electronicsProblem (why), loadedAt }
@@ -80,6 +84,7 @@
     CN.insights.load(book);
     CN.mail.load(book);
     CN.electronics.load(book);
+    CN.vendors.load(book);
     clearErrors();
     renderStatus();
     if (!PATHS[location.hash.replace(/^#\/?/, '').split('?')[0]]) history.replaceState(null, '', '#/pickups');
@@ -238,6 +243,7 @@
     CN.insights.init();
     CN.mail.init();
     CN.electronics.init();
+    CN.vendors.init();
     setUpStart();
     const pick = () => $('file-input').click();
     for (const id of ['open-file', 'open-file-alt', 'status-open']) $(id).addEventListener('click', pick);
