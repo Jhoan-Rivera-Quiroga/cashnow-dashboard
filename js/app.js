@@ -4,8 +4,8 @@
   'use strict';
   const F = CN.fmt;
   const $ = id => document.getElementById(id);
-  const SECTIONS = ['welcome', 'pickups', 'details', 'drivers', 'drv-details', 'insights', 'mail', 'mail-details']; // #view-…
-  const MENU = ['nav-pickups', 'nav-drivers', 'nav-insights', 'nav-mail'];
+  const SECTIONS = ['welcome', 'pickups', 'details', 'drivers', 'drv-details', 'insights', 'mail', 'mail-details', 'electronics']; // #view-…
+  const MENU = ['nav-pickups', 'nav-drivers', 'nav-insights', 'nav-mail', 'nav-electronics'];
   // Each address path: the section it shows, its menu item, and the page module that fills it.
   const PATHS = {
     pickups: { section: 'pickups', menu: 'nav-pickups', show: p => CN.pickups.show('pickups', p) },
@@ -17,9 +17,10 @@
     'insights/details': { section: 'details', menu: 'nav-insights', show: p => CN.insights.show(p, 'details') },
     mail: { section: 'mail', menu: 'nav-mail', show: p => CN.mail.show(p, 'mail') },
     'mail/details': { section: 'mail-details', menu: 'nav-mail', show: p => CN.mail.show(p, 'details') },
+    electronics: { section: 'electronics', menu: 'nav-electronics', show: p => CN.electronics.show(p) },
   };
-  // { name, source: 'google' | 'file', sheets, pickups, payouts and mail (each null when its sheet is
-  // missing or unreadable), payoutsProblem and mailProblem (why), loadedAt }
+  // { name, source: 'google' | 'file', sheets, pickups, payouts, mail and electronics (each null when
+  // its sheet is missing or unreadable), payoutsProblem, mailProblem and electronicsProblem (why), loadedAt }
   let book = null;
 
   const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
@@ -78,6 +79,7 @@
     CN.drivers.load(book);
     CN.insights.load(book);
     CN.mail.load(book);
+    CN.electronics.load(book);
     clearErrors();
     renderStatus();
     if (!PATHS[location.hash.replace(/^#\/?/, '').split('?')[0]]) history.replaceState(null, '', '#/pickups');
@@ -141,16 +143,17 @@
   }
 
   function renderStatus() {
-    const p = book.pickups, q = book.payouts, m = book.mail, google = book.source === 'google';
+    const p = book.pickups, q = book.payouts, m = book.mail, e = book.electronics, google = book.source === 'google';
     $('status-file').textContent = [
       google ? `${book.name} (Google Sheets)` : book.name,
       `${F.int(p.n)} pick-up lines`,
       q ? `${F.int(q.n)} payout lines` : '',
       m ? `${F.int(m.n)} mail order lines` : '',
+      e ? `${F.int(e.n)} electronics lines` : '',
       `${F.dayLong(p.minDay)} – ${F.dayLong(p.maxDay)}`,
       google ? `loaded ${F.clock(book.loadedAt)}` : '',
     ].filter(Boolean).join(' · ');
-    const count = noteCount(p.notes) + (q ? noteCount(q.notes) : 1) + (m ? noteCount(m.notes) : 1);
+    const count = noteCount(p.notes) + [q, m, e].reduce((s, x) => s + (x ? noteCount(x.notes) : 1), 0);
     $('status-notes').textContent = count ? `Data notes (${count})` : 'Data notes';
     for (const id of ['status-refresh', 'status-choose', 'status-signout']) $(id).hidden = !google;
     if (CN.google.fixedSheet) $('status-choose').hidden = true; // js/config.js names the sheet
@@ -196,6 +199,7 @@
     if (n.noAmount) items.push(`<li>${F.int(n.noAmount)} row${n.noAmount > 1 ? 's have' : ' has'} no amount and count${n.noAmount > 1 ? '' : 's'} as $0.</li>`);
     items.push(sheetNotes(book.payouts, book.payoutsProblem, 'Driver Payouts', 'The Drivers page shows no payouts.'));
     items.push(sheetNotes(book.mail, book.mailProblem, 'Mail_Order', 'The Mail Order page shows no mail orders.'));
+    items.push(sheetNotes(book.electronics, book.electronicsProblem, 'Electronics', 'The Electronics page shows nothing.'));
     items.push('<li>Names that differ only in capital letters or extra spaces count as one, as in Power BI ' +
       '(for example "PAUL" and "Paul"). Each is shown with the spelling that appears first in the sheet.</li>');
     $('notes-list').innerHTML = items.join('');
@@ -233,6 +237,7 @@
     CN.drivers.init();
     CN.insights.init();
     CN.mail.init();
+    CN.electronics.init();
     setUpStart();
     const pick = () => $('file-input').click();
     for (const id of ['open-file', 'open-file-alt', 'status-open']) $(id).addEventListener('click', pick);

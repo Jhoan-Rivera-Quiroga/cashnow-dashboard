@@ -4,8 +4,8 @@ A web version of the *Cash Now Test Strips – Executive Report* (Power BI). It 
 browser, so it can be hosted for free on GitHub Pages with no server.
 
 So far it has the **Pick Ups** page with its **Pick Up Detail** drill-through, the **Drivers** and
-**Insights** pages, and the **Mail Order** page with its **Mail Details** drill-through. The other pages
-are listed in the menu and come next.
+**Insights** pages, the **Mail Order** page with its **Mail Details** drill-through, and the
+**Electronics** page. The other pages are listed in the menu and come next.
 
 ## Your data stays out of this repository
 
@@ -61,6 +61,12 @@ The **Mail Order** page works like Pick Ups, for mail orders. It has Date, Range
 (Weekly to start), the **Top Mail Vendor**, **Total Orders Completed** and **Total Cash Spent** cards,
 and trend charts of cash spent and orders completed. Click a point to filter the cards. **Details**
 opens **Mail Details**: the order lines behind the view, with their products and sales person.
+
+The **Electronics** page lists the phones and tablets bought in its date range, with the date, seller,
+model, quantity and amount paid, sortable and downloadable as CSV. Power BI's page is just that
+table. This page adds the **Devices Bought**, **Total Paid** and **Average per Device** cards and a
+**Paid by Model** chart, as the report's spec suggests. Clicking a model filters the cards and the
+table.
 
 ## Setting up Google sign-in
 
@@ -119,8 +125,9 @@ holds the dollars paid), and `Category` when the sheet has it, for the Insights 
 Drivers page also reads the **Driver Payouts** sheet: `Date`,
 `Driver name`, `Payment Amount`, `Concept` and `Notes`. The Mail Order pages read the **Mail_Order**
 sheet: `Delivery Date`, `Delivery Order (D.O.) No.`, `First Name`, `Product Code / Name`, `Quantity`,
-`Total`, `Order Qty`, and `Sales Person` when it's there. Without either of those sheets, the other
-pages still work.
+`Total`, `Order Qty`, and `Sales Person` when it's there. The Electronics page reads the
+**Electronics** sheet: `Collection Date`, `First Name`, `Marketing Name`, `Quantity` and `Comments`
+(the amount paid). Without any of these three sheets, the other pages still work.
 From Google Sheets the dashboard downloads only those columns. If a column is renamed, the page names
 the missing one.
 
@@ -134,6 +141,7 @@ the missing one.
 | Total Cash Spent (mail) | Sum of `Total` on the Mail_Order sheet (each product line's dollars) |
 | Total Orders Completed | Sum of `Order Qty`, which the sheet keeps on a row of its own for each day |
 | Top Mail Vendor | `First Name` with the most mail cash spent in the current view |
+| Total Paid (electronics) | Sum of `Comments` on the Electronics sheet; Devices Bought is the sum of `Quantity` |
 
 Cleaning rules:
 
@@ -149,10 +157,12 @@ Cleaning rules:
 - **Mail Details** lists each order line's `Total`, so it adds up to the Mail Order page's cash. Power
   BI's table adds up `Payment Amount`, which repeats the whole order's payment on each of its lines, so
   its total for December 2025 is $11,183 against $5,922 actually paid.
+- The Electronics table shows each sale's date. Power BI's table shows only the year, which merges a
+  seller's sales of the same model within a year into one row.
 
 ## Next steps
 
-- The remaining pages: Electronics, Vendors & Products, Demographics, Cancelled and Call Report.
+- The remaining pages: Vendors & Products, Demographics, Cancelled and Call Report.
 
 ## Built with
 

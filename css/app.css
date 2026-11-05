@@ -107,6 +107,7 @@ body[data-view="details"] .main, body[data-view="drv-details"] .main { backgroun
 /* KPI cards */
 .kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)) minmax(96px, .7fr); gap: 6px; padding: 0 3%; }
 .kpis-3 { grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(110px, .6fr); }
+.kpis-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .kpi {
   display: flex; flex-direction: column; justify-content: center; min-width: 0; min-height: 76px;
   padding: 10px 8px; background: var(--kpi); color: #fff; border-radius: 10px; text-align: center;
@@ -142,6 +143,13 @@ body[data-view="details"] .main, body[data-view="drv-details"] .main { backgroun
 .drv-problem { margin: 0; padding: 10px 14px; background: #fff; border-radius: 10px; color: #a1003b; font-size: 14px; }
 .chart-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .chart-grid .chart-card { padding-bottom: 10px; }
+/* A chart beside a table on a white card */
+.table-grid { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); }
+.table-card { display: flex; flex-direction: column; gap: 8px; padding: 12px 18px 14px; }
+.table-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.table-head h2 { margin: 0; text-align: left; }
+.table-head p { flex: 1; margin: 0; color: var(--muted); font-size: 13px; }
+.table-card .table-wrap { max-height: clamp(260px, 46vh, 420px); }
 /* Tall enough for a top 15 on most screens; longer lists scroll inside the card. */
 .chart-scroll { max-height: clamp(260px, 46vh, 420px); overflow-y: auto; overscroll-behavior: contain; }
 .chart-scroll .chart { height: 160px; }
@@ -258,6 +266,9 @@ dialog li ul { margin-top: 4px; font-size: 13px; }
   .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .details-btn { grid-column: span 2; }
   .kpis-3 .details-btn { grid-column: auto; } /* beside the third card */
+  .kpis-cards .kpi:last-child { grid-column: span 2; }
+  .table-head { justify-content: space-between; }
+  .table-head p { flex-basis: 100%; order: 3; } /* under the title and the download button */
   .kpi-value { font-size: 18px; }
   .chart-card { padding: 8px 8px 2px; border-radius: 20px; }
   .selection { position: static; display: flex; width: fit-content; margin: 6px auto 0; }
