@@ -3,10 +3,9 @@
 A web version of the *Cash Now Test Strips – Executive Report* (Power BI). It runs entirely in the
 browser, so it can be hosted for free on GitHub Pages with no server.
 
-So far it has the **Pick Ups** page with its **Pick Up Detail** drill-through, the **Drivers** and
-**Insights** pages, the **Mail Order** page with its **Mail Details** drill-through, and the
-**Electronics**, **Vendors & Products**, **Demographics** and **Cancelled** pages. The **Call Report**
-page is listed in the menu and comes next.
+It has every page of the Power BI report: **Pick Ups** with its **Pick Up Detail** drill-through,
+**Drivers**, **Insights**, **Mail Order** with its **Mail Details** drill-through, **Electronics**,
+**Vendors & Products**, **Demographics**, **Cancelled** and **Call Report**.
 
 ## Your data stays out of this repository
 
@@ -87,6 +86,15 @@ the report's spec suggests. Clicking a reason or a status filters the cards, the
 table. The table shows each seller's name and phone number in separate columns, sorts by any column
 and downloads as CSV.
 
+The **Call Report** page shows the phone calls of each day, with Date, Range and Dynamic Date (Weekly
+to start). Power BI's page has the **Total Calls**, **Total Inbound**, **Total Outbound**,
+**Answered** and **Missed** cards and a trend of total calls. This page adds the **Answer Rate** card
+(the share of inbound calls answered), the average calls a day on the Total Calls card, a trend of the
+answer rate, the average calls on each weekday, and a table of the days that sorts by any column and
+downloads as CSV, as the report's spec suggests. Clicking a point in either trend filters the cards,
+the weekday chart and the table to that day, week or month. Clicking a weekday filters the cards, the
+trends and the table to it.
+
 ## Setting up Google sign-in
 
 This is done once, in a Google Cloud project:
@@ -147,8 +155,10 @@ sheet: `Delivery Date`, `Delivery Order (D.O.) No.`, `First Name`, `Product Code
 `Total`, `Order Qty`, and `Sales Person` and `State` when they're there. The Electronics page reads the
 **Electronics** sheet: `Collection Date`, `First Name`, `Marketing Name`, `Quantity` and `Comments`
 (the amount paid). The Cancelled page reads the **Return** sheet: `Collection Date`, `First Name`,
-`Reason and Follow up Steps`, `Follow Up Status`, and `Customer's Phone No.` when it's there. Without
-any of these sheets, the other pages still work.
+`Reason and Follow up Steps`, `Follow Up Status`, and `Customer's Phone No.` when it's there. The
+Call Report page reads the **Comunication_Table** sheet, which has one row per day: `Date`,
+`Total Calls`, `Total Inbound`, `Total Outbound`, `Answered` and `Missed`. Without any of these
+sheets, the other pages still work.
 From Google Sheets the dashboard downloads only those columns. If a column is renamed, the page names
 the missing one.
 
@@ -166,6 +176,9 @@ the missing one.
 | Total Cancelled Pick Ups | Count of the Return sheet's rows with a `Collection Date` in the range, as in Power BI |
 | Excluding Duplicates & Tests | Total Cancelled Pick Ups minus the reasons in the Duplicate and Test or training groups |
 | Follow Up Rate | Follow Up Done ÷ the cancellations that needed a follow-up (every status but No Need for Follow Up). A blank status counts as not followed up |
+| Total Calls, Total Inbound, Total Outbound, Answered, Missed | Sums of the Comunication_Table columns of the same names, as in Power BI |
+| Answer Rate | Answered ÷ Total Inbound (Answered and Missed count inbound calls) |
+| Calls by Weekday | The calls on each weekday in the date range ÷ the number of those weekdays in the sheet |
 
 The Return sheet's reasons are typed freely, in hundreds of spellings, so the Cancelled page's chart
 groups them by their words. Each reason goes in the first group it matches, and the table shows it as
@@ -215,10 +228,20 @@ Cleaning rules:
   from `First Name` otherwise. Power BI's table shows `First Name` as typed and the statuses as typed,
   sorted by reason; this table adds the date and starts sorted by it.
 - A time typed as a reason (the sheet turns "1:00 PM" into a time value) is shown as a time.
+- The Comunication_Table sheet has one row per day with that day's counts, not one row per call, so
+  calls can't be broken down by hour. It starts on May 1, 2025, so Power BI's default dates (January 1
+  to May 31, 2025) cover only May 2025: 6,417 calls, as this page shows for the same dates.
+- Days missing from the sheet, such as holidays and the Sundays of spring 2026, are left out of the
+  call trends and the weekday averages rather than counted as zero, as in Power BI.
+- One day's call counts don't add up: on May 20, 2026, Answered + Missed is 163 against 164 inbound
+  calls. The cards add up each column as typed, as Power BI does, and **Data notes** lists any such day.
+- Power BI's Dynamic Date on the Call Report also lists All, which shows the same daily chart. The
+  sheet's `SL` column isn't used, here or in Power BI.
 
 ## Next steps
 
-- The remaining page: Call Report.
+Every page of the Power BI report is built. A possible addition: a map of the US states on the
+Demographics page, which needs a public outline of the states.
 
 ## Built with
 

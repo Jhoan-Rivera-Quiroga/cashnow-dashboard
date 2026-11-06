@@ -28,6 +28,7 @@
 <script defer src="js/vendors.js"></script>
 <script defer src="js/demographics.js"></script>
 <script defer src="js/cancelled.js"></script>
+<script defer src="js/calls.js"></script>
 <script defer src="js/app.js"></script>
 </head>
 <body data-view="welcome">
@@ -67,11 +68,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m5.7 5.7 12.6 12.6"/></svg>
         <span>Cancelled</span>
       </a>
-      <a class="nav-item" aria-disabled="true" title="Coming soon">
+      <a class="nav-item" id="nav-calls" href="#/calls">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.5 3.5h3.2l1.8 4.6-2.3 1.4a11 11 0 0 0 6.3 6.3l1.4-2.3 4.6 1.8v3.2a2 2 0 0 1-2.2 2A17 17 0 0 1 3.5 5.7a2 2 0 0 1 2-2.2z"/></svg>
         <span>Call Report</span>
       </a>
-      <p class="nav-note">Other pages are coming next.</p>
     </nav>
   </aside>
 
@@ -484,6 +484,73 @@
           </div>
           <div class="table-wrap"><table class="detail-table" id="can-table"></table></div>
           <button type="button" class="btn more" id="can-more" hidden></button>
+        </section>
+      </div>
+    </section>
+
+    <section class="view" id="view-calls" hidden>
+      <header class="toolbar">
+        <img class="logo" src="assets/cashmoney-logo.png" alt="Cash Money Test Strips" width="216" height="62">
+        <div class="field">
+          <span class="field-label">Date</span>
+          <div class="date-range">
+            <input class="control" type="date" id="calls-from" aria-label="From">
+            <span aria-hidden="true">–</span>
+            <input class="control" type="date" id="calls-to" aria-label="To">
+          </div>
+        </div>
+        <div class="field">
+          <label class="field-label" for="calls-preset">Range</label>
+          <select class="control" id="calls-preset"></select>
+        </div>
+        <div class="field">
+          <label class="field-label" for="calls-granularity">Dynamic Date</label>
+          <select class="control" id="calls-granularity">
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+        </div>
+        <img class="logo logo-right" src="assets/cashmoney-logo.png" alt="" width="216" height="62">
+      </header>
+      <div class="selection selection-row" id="calls-selection" hidden>
+        <span>Showing <b id="calls-selection-label"></b></span>
+        <button type="button" id="calls-clear">Clear</button>
+      </div>
+      <p class="drv-problem" id="calls-problem" role="status" hidden></p>
+      <div class="view-body" id="calls-content">
+        <div class="kpis kpis-6" id="calls-kpis">
+          <div class="kpi"><div class="kpi-value" id="calls-kpi-total">–</div><div class="kpi-label">Total Calls<span class="kpi-amt" id="calls-kpi-daily"></span></div></div>
+          <div class="kpi"><div class="kpi-value" id="calls-kpi-inbound">–</div><div class="kpi-label">Total Inbound</div></div>
+          <div class="kpi"><div class="kpi-value" id="calls-kpi-outbound">–</div><div class="kpi-label">Total Outbound</div></div>
+          <div class="kpi"><div class="kpi-value" id="calls-kpi-answered">–</div><div class="kpi-label">Answered</div></div>
+          <div class="kpi"><div class="kpi-value" id="calls-kpi-missed">–</div><div class="kpi-label">Missed</div></div>
+          <div class="kpi"><div class="kpi-value" id="calls-kpi-rate">–</div><div class="kpi-label">Answer Rate</div></div>
+        </div>
+        <section class="chart-card">
+          <h2>Total Calls by Date</h2>
+          <div class="chart" id="chart-calls-total" role="img" aria-label="Total calls by date. Click a point to filter the page."></div>
+        </section>
+        <div class="chart-grid">
+          <section class="chart-card">
+            <h2>Answer Rate by Date</h2>
+            <p class="chart-note">Answered ÷ Total Inbound</p>
+            <div class="chart" id="chart-calls-rate" role="img" aria-label="Share of inbound calls answered, by date. Click a point to filter the page."></div>
+          </section>
+          <section class="chart-card">
+            <h2>Calls by Weekday</h2>
+            <p class="chart-note">Average calls a day. Days missing from the sheet, such as holidays, don't count.</p>
+            <div class="chart" id="chart-calls-weekday" role="img" aria-label="Average calls a day on each weekday. Click a weekday to filter the page."></div>
+          </section>
+        </div>
+        <section class="chart-card table-card">
+          <div class="table-head">
+            <h2>Calls by Day</h2>
+            <p id="calls-context"></p>
+            <button type="button" class="btn" id="calls-export">Download CSV</button>
+          </div>
+          <div class="table-wrap"><table class="detail-table" id="calls-table"></table></div>
+          <button type="button" class="btn more" id="calls-more" hidden></button>
         </section>
       </div>
     </section>

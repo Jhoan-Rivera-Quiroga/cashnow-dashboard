@@ -6,13 +6,16 @@
   const { esc } = CN.charts;
   const PAGE = 500; // rows added per "Show more"
   const collator = new Intl.Collator('en', { sensitivity: 'base' });
-  const NUMBERS = new Set(['num', 'money']); // right-aligned and summed in the total row
-  const html = { day: F.iso, text: esc, num: F.num, money: F.money };
-  const csv = { day: F.iso, text: F.csv, num: String, money: v => v.toFixed(2) };
+  const NUMBERS = new Set(['num', 'money', 'pct']); // right-aligned, with a total
+  const pct = v => (v === null ? '–' : F.pct(v));
+  const html = { day: F.iso, text: esc, num: F.num, money: F.money, pct };
+  const csv = { day: F.iso, text: F.csv, num: String, money: v => v.toFixed(2), pct: v => (v === null ? '' : F.pct(v)) };
 
   // ids: { table, more } (the <table> and its "Show more" button). cols: [{ key, label, type:
-  // 'day' | 'text' | 'num' | 'money', wrap (long text that wraps onto more lines) }]. Rows are sorted by
-  // the first column until a header is clicked, and ties go by the text and date columns in order.
+  // 'day' | 'text' | 'num' | 'money' | 'pct' (a share from 0 to 1, or null), wrap (long text that wraps
+  // onto more lines), total (rows => the total row's value; number columns are summed by default, and a
+  // pct column needs one) }]. Rows are sorted by the first column until a header is clicked, and ties go
+  // by the text and date columns in order.
   function create(ids, cols) {
     const table = document.getElementById(ids.table), more = document.getElementById(ids.more);
     const T = { rows: [], sort: cols[0].key, dir: 1, shown: 0 };
@@ -76,8 +79,12 @@
       }
       const cells = [`<td colspan="${firstNumber}">Total</td>`];
       for (const c of cols.slice(firstNumber)) {
-        cells.push(NUMBERS.has(c.type)
-          ? `<td class="num" data-total="${c.key}">${html[c.type](T.rows.reduce((s, r) => s + r[c.key], 0))}</td>` : '<td></td>');
+        if (!NUMBERS.has(c.type) || (c.type === 'pct' && !c.total)) {
+          cells.push('<td></td>');
+          continue;
+        }
+        const total = c.total ? c.total(T.rows) : T.rows.reduce((s, r) => s + r[c.key], 0);
+        cells.push(`<td class="num" data-total="${c.key}">${html[c.type](total)}</td>`);
       }
       table.tFoot.innerHTML = `<tr>${cells.join('')}</tr>`;
     }

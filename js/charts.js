@@ -29,12 +29,17 @@
     return out.sort((a, b) => b.value - a.value).slice(0, n);
   }
 
-  // One bar per item, largest first, each with its value; the chart is as tall as the list needs.
+  // One bar per item, in the order given, each with its value; the chart is as tall as the list needs.
   // items: [{ label, key, value }]; a null key can't be selected. opts: { selKey (highlighted, the rest
   // dimmed), empty (message for no items), hint (tooltip line), format (value text, money by default),
-  // unit (tooltip suffix), label (bar-end text, format by default), labelRoom (px kept for it) }.
+  // unit (tooltip suffix), label (bar-end text, format by default), labelRoom (px kept for it),
+  // detail (item => another tooltip line), fill (keep the chart's own height, for a short list beside
+  // a trend chart) }.
   function bars(chart, items, opts) {
-    chart.getDom().style.height = Math.max(160, items.length * ROW + 12) + 'px';
+    // The chart is replaced below, tooltip and all. Hiding the tooltip first stops ECharts from
+    // re-showing the old one a moment later, which threw an error after a click on a bar.
+    chart.dispatchAction({ type: 'hideTip' });
+    chart.getDom().style.height = opts.fill ? '' : Math.max(160, items.length * ROW + 12) + 'px';
     chart.resize();
     if (!items.length) {
       chart.setOption(empty(opts.empty), true);
@@ -49,9 +54,10 @@
       tooltip: {
         trigger: 'item',
         formatter: p => {
-          const key = items[p.dataIndex].key;
+          const it = items[p.dataIndex], key = it.key;
           const more = key === null ? '' : hint(key === selKey ? 'Click again to clear' : opts.hint);
-          return `${esc(p.name)}<br><b>${format(p.value)}${opts.unit || ''}</b>` + more;
+          const detail = opts.detail ? '<br>' + esc(opts.detail(it)) : '';
+          return `${esc(p.name)}<br><b>${format(p.value)}${opts.unit || ''}</b>` + detail + more;
         },
       },
       xAxis: { type: 'value', show: false, max: 'dataMax' },
@@ -71,13 +77,15 @@
 
   // A trend line with every point labelled. The selected point gets a band behind it and the rest
   // are dimmed. opts: { gran (a CN.ranges.GRAN entry), sel (the selected key, or null), money
-  // (dollars rather than a count), unit (what a count counts, for the tooltip) }.
+  // (dollars rather than a count), pct (shares from 0 to 1, on a 0–100% axis; a null value leaves a
+  // gap), unit (what a count counts, or what a share is of, for the tooltip) }.
   function line(chart, keys, values, opts) {
     const g = opts.gran;
     const sel = opts.sel === null ? -1 : keys.indexOf(opts.sel);
     const dim = sel >= 0;
     const inK = opts.money && values.some(v => v >= 1000);
-    const valueLabel = v => (inK && Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + 'K' : F.int(v));
+    const valueLabel = v => (opts.pct ? F.pct(v) : inK && Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + 'K' : F.int(v));
+    const isValue = v => typeof v === 'number' && !Number.isNaN(v);
     chart.setOption({
       animationDuration: 300,
       textStyle: { fontFamily: FONT() },
@@ -87,8 +95,8 @@
         axisPointer: { type: 'line', lineStyle: { color: '#d7b8d3' } },
         formatter: ps => {
           const p = ps.find(q => q.seriesIndex === 0);
-          if (!p) return '';
-          const v = opts.money ? F.money(p.value) : `${F.int(p.value)} ${opts.unit}`;
+          if (!p || !isValue(p.value)) return '';
+          const v = opts.money ? F.money(p.value) : `${opts.pct ? F.pct(p.value) : F.int(p.value)} ${opts.unit}`;
           return `${g.name} ${F.iso(keys[p.dataIndex])}<br><b>${v}</b>` + hint('Click to filter');
         },
       },
@@ -101,8 +109,8 @@
       },
       yAxis: [
         {
-          type: 'value', min: 0, splitNumber: 3, splitLine: { show: false },
-          axisLabel: { color: MUTED, formatter: v => (inK ? v / 1000 + 'K' : F.int(v)) },
+          type: 'value', min: 0, max: opts.pct ? 1 : null, splitNumber: opts.pct ? 2 : 3, splitLine: { show: false },
+          axisLabel: { color: MUTED, formatter: v => (opts.pct ? Math.round(v * 100) + '%' : inK ? v / 1000 + 'K' : F.int(v)) },
         },
         { type: 'value', min: 0, max: 1, show: false },
       ],
@@ -119,7 +127,7 @@
           showAllSymbol: true,
           lineStyle: { color: LINE, width: 2.5, opacity: dim ? 0.45 : 1 },
           itemStyle: { color: LINE },
-          label: { show: true, position: 'top', distance: 7, fontSize: 12, fontWeight: 700, formatter: p => valueLabel(p.value) },
+          label: { show: true, position: 'top', distance: 7, fontSize: 12, fontWeight: 700, formatter: p => (isValue(p.value) ? valueLabel(p.value) : '') },
           labelLayout: { hideOverlap: true },
           emphasis: { scale: 1.4 },
           z: 3,

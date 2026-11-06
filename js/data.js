@@ -1,6 +1,6 @@
 /* Turns the Collection sheet and the optional sheets (Driver Payouts, Mail_Order, Electronics,
-   Return) into clean columns, from a workbook file (read with SheetJS) or from rows that
-   js/google.js reads from Google Sheets. */
+   Return, Comunication_Table) into clean columns, from a workbook file (read with SheetJS) or from
+   rows that js/google.js reads from Google Sheets. */
 (function (CN) {
   'use strict';
   const F = CN.fmt;
@@ -65,6 +65,27 @@
     status: 'Follow Up Status',
   };
 
+  // Columns the Call Report page reads: one row per day, with that day's call counts. (The sheet's
+  // name is spelled that way.)
+  const CALL_COLUMNS = {
+    date: 'Date',
+    total: 'Total Calls',
+    inbound: 'Total Inbound',
+    outbound: 'Total Outbound',
+    answered: 'Answered', // of the inbound calls
+    missed: 'Missed',
+  };
+  const CALL_COUNTS = ['total', 'inbound', 'outbound', 'answered', 'missed'];
+
+  // What doesn't add up on a day's row, for Data notes; v(field) is the row's count. The cards add up
+  // each column as typed, as Power BI does.
+  function callMismatch(v) {
+    const parts = [];
+    if (v('inbound') + v('outbound') !== v('total')) parts.push(`Total Calls ${v('total')}, Inbound + Outbound ${v('inbound') + v('outbound')}`);
+    if (v('answered') + v('missed') !== v('inbound')) parts.push(`Total Inbound ${v('inbound')}, Answered + Missed ${v('answered') + v('missed')}`);
+    return parts.join('; ');
+  }
+
   // An optional sheet and how to read it with readTable.
   const optional = (field, name, table) => ({
     field, name,
@@ -87,6 +108,7 @@
       columns: CANCELLED_COLUMNS, optional: { phone: "Customer's Phone No." },
       text: ['name', 'phone', 'reason', 'status'], cells: { reason: dateTimeText },
     }),
+    optional('calls', 'Comunication_Table', { columns: CALL_COLUMNS, text: [], numbers: CALL_COUNTS, buckets: true, rowNote: callMismatch }),
   ];
 
   const key = s => String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -137,7 +159,8 @@
     return [day >= 1 ? F.iso(day + offset) : '', time].filter(Boolean).join(' ') || '12:00 AM';
   }
 
-  const newNotes = () => ({ commaDecimals: [], badDates: [], noDate: 0, badAmounts: [], noAmount: 0 });
+  // mismatch: rows whose numbers don't add up (see readTable's rowNote).
+  const newNotes = () => ({ commaDecimals: [], badDates: [], noDate: 0, badAmounts: [], noAmount: 0, mismatch: [] });
 
   // A row's date as a serial day, or -1 when it's missing or can't be read (listed in Data notes).
   function readDate(raw, offset, notes, row) {
@@ -317,8 +340,9 @@
   // An optional sheet's table (see OPTIONAL_SHEETS); rows as for readPickups. t: { columns, optional,
   // text (fields grouped by name, like the Pick Ups names), cells ({ field: (value, dateOffset) => value }
   // to change a text field's raw cells first), numbers (read as numbers, 0 when blank), countRow(row,
-  // col) (rows that rightly have no amount), buckets (add each row's week and month) }. The amount
-  // column's oddities go in Data notes; a table without an amount column has amount null.
+  // col) (rows that rightly have no amount), buckets (add each row's week and month), rowNote(value)
+  // (what doesn't add up on a row, or ''; value(field) is one of its numbers) }. The amount column's
+  // oddities and the rowNote findings go in Data notes; a table without an amount column has amount null.
   function readTable(rows, firstRow, sheet, dateOffset, t) {
     const h = rows.findIndex(r => r.some(v => v != null));
     if (h < 0) throw new DataError(`The "${sheet}" sheet is empty.`);
@@ -352,6 +376,8 @@
         const v = toNumber(row[col[f]]);
         nums[f][n] = Number.isNaN(v) ? 0 : v;
       }
+      const odd = t.rowNote ? t.rowNote(f => nums[f][n]) : '';
+      if (odd) notes.mismatch.push({ row: excelRow, day: d, value: odd });
       n++;
     }
 
