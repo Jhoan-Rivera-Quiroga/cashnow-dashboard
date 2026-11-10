@@ -1,5 +1,6 @@
-/* Google sign-in, the Google file chooser, and reading the data sheet with the Sheets API.
-   Active only when js/config.js has a client ID and an API key. */
+/* Reading the data sheet with the Sheets API: without signing in when the sheet is shared with
+   "Anyone with the link", and otherwise with Google sign-in and the Google file chooser. Needs an API
+   key in js/config.js, and a client ID for sign-in. */
 (function (CN) {
   'use strict';
   const { DataError } = CN.data;
@@ -17,6 +18,9 @@
   const projectNumber = String(cfg.projectNumber || (/^(\d+)-/.exec(cfg.clientId || '') || [])[1] || '');
   const enabled = Boolean(cfg.clientId && cfg.apiKey && projectNumber);
   const fixedSheet = cfg.sheetId ? String(cfg.sheetId) : null; // set in js/config.js, or picked per browser
+  // Without signing in, the API key reads the configured sheet once it's shared with "Anyone with the
+  // link" and the key may use the Google Sheets API.
+  const canOpen = Boolean(cfg.apiKey && fixedSheet);
 
   class Cancelled extends Error {
     constructor() { super('Cancelled'); this.name = 'Cancelled'; }
@@ -144,19 +148,23 @@
     try { localStorage.removeItem(STORE); } catch (e) { /* nothing stored */ }
   }
 
+  // With accessToken, Google checks that the signed-in person may open the sheet. Without one, the
+  // request carries the API key, which can read only a sheet shared with "Anyone with the link".
   async function api(path, params, accessToken) {
+    const all = accessToken ? params : [...params, ['key', cfg.apiKey]];
     // %20 rather than + for spaces, as in Google's examples ("Driver Payouts").
-    const url = SHEETS_API + path + '?' + params.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
+    const url = SHEETS_API + path + '?' + all.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
     let res;
     try {
-      res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+      res = await fetch(url, accessToken ? { headers: { Authorization: `Bearer ${accessToken}` } } : {});
     } catch (e) {
       throw new DataError("Couldn't reach Google Sheets. Check the internet connection and try again.");
     }
     if (res.ok) return res.json();
     let error = {};
     try { error = (await res.json()).error || {}; } catch (e) { /* not JSON */ }
-    console.error('Google Sheets API', res.status, error);
+    // Refused without sign-in is the usual answer for a private sheet, so that isn't logged as an error.
+    (accessToken ? console.error : console.info)('Google Sheets API', res.status, error);
     const reasons = (error.details || []).map(d => d.reason);
     if (res.status === 401) {
       token = null;
@@ -165,6 +173,11 @@
     if (reasons.includes('SERVICE_DISABLED') || /has not been used|is disabled/i.test(error.message || '')) {
       throw new DataError("The Google Sheets API is turned off in the dashboard's Google Cloud project. " +
         'Turn it on under APIs & Services, Library.');
+    }
+    // The API key may not read Google Sheets, or not from this address (API_KEY_SERVICE_BLOCKED,
+    // API_KEY_HTTP_REFERRER_BLOCKED, API_KEY_INVALID): sign-in can still open the sheet.
+    if (!accessToken && reasons.some(r => /^API_KEY_/.test(r))) {
+      throw new NoAccess(`The dashboard's API key can't read the sheet from here (${reasons.join(', ')}).`);
     }
     if (res.status === 403 || res.status === 404) {
       throw new NoAccess("Google didn't let the dashboard open that sheet. Try again in a minute. If it still " +
@@ -225,7 +238,7 @@
     const data = await api(`${base}/values:batchGet`, [...ranges, ['majorDimension', 'COLUMNS'], ...RAW], accessToken);
     const rowsOf = t => toRows(data.valueRanges.slice(t.first, t.first + t.cols.length));
     const c = tabs[0];
-    const loaded = { name: title, source: 'google', sheets: names, pickups: c.read(rowsOf(c), c.h, c.sheet, 0) };
+    const loaded = { name: title, source: 'google', signedIn: Boolean(accessToken), sheets: names, pickups: c.read(rowsOf(c), c.h, c.sheet, 0) };
     for (const t of optional) {
       Object.assign(loaded, CN.data.optionalSheet(t.o, t.sheet, () => {
         if (t.problem) throw t.problem;
@@ -233,6 +246,13 @@
       }, what));
     }
     return loaded;
+  }
+
+  // Reads the sheet named in js/config.js without signing in. Throws NoAccess when it needs a sign-in:
+  // the sheet isn't shared with "Anyone with the link", or the API key can't read it.
+  function open(progress) {
+    progress('Reading the data from Google Sheets…');
+    return readSheet(fixedSheet, null);
   }
 
   const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -283,5 +303,5 @@
     }
   }
 
-  CN.google = { enabled, fixedSheet: Boolean(fixedSheet), init, connect, remembered, readSheet, Cancelled };
+  CN.google = { enabled, canOpen, fixedSheet: Boolean(fixedSheet), init, connect, open, remembered, readSheet, Cancelled, NoAccess };
 })(window.CashNow = window.CashNow || {});

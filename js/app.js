@@ -131,6 +131,26 @@
     }
   }
 
+  // Reads the sheet without signing in. Returns false when it needs a sign-in instead: the sheet isn't
+  // shared with "Anyone with the link", or the API key can't read it. Other problems show as errors.
+  async function openShared() {
+    clearErrors();
+    try {
+      const t0 = performance.now();
+      const loaded = await CN.google.open(busy);
+      console.info(`Read ${loaded.name} from Google Sheets without signing in, in ${Math.round(performance.now() - t0)} ms`);
+      useBook(loaded);
+      return true;
+    } catch (err) {
+      if (!(err instanceof CN.google.NoAccess)) fail(err, "The sheet couldn't be read");
+      // Refresh, after the sheet stopped being open to anyone with the link.
+      else if (book) fail(new CN.data.DataError('The data sheet is no longer open to anyone with the link. Reload the page to sign in with Google.'));
+      return false;
+    } finally {
+      busy(null);
+    }
+  }
+
   async function openFile(file) {
     if (!file) return;
     if (!/\.(xlsx|xlsm|xlsb|xls)$/i.test(file.name)) {
@@ -173,21 +193,28 @@
     ].filter(Boolean).join(' · ');
     const count = noteCount(p.notes) + [q, m, e, c, k].reduce((s, x) => s + (x ? noteCount(x.notes) : 1), 0);
     $('status-notes').textContent = count ? `Data notes (${count})` : 'Data notes';
-    for (const id of ['status-refresh', 'status-choose', 'status-signout']) $(id).hidden = !google;
-    if (CN.google.fixedSheet) $('status-choose').hidden = true; // js/config.js names the sheet
+    // Opened without signing in, there's nobody to sign out and no other sheet to choose.
+    const signedIn = google && book.signedIn;
+    $('status-refresh').hidden = !google;
+    $('status-choose').hidden = !signedIn || CN.google.fixedSheet; // or js/config.js names the sheet
+    $('status-signout').hidden = !signedIn;
     $('status-google').hidden = google || !CN.google.enabled;
     $('status-open').hidden = google;
     $('status').hidden = false;
   }
 
-  // The start screen offers Google Sheets once js/config.js is filled in, and a workbook file otherwise.
-  function setUpStart() {
+  // A sheet shared with "Anyone with the link" opens straight away. Otherwise the start screen offers
+  // Google sign-in once js/config.js is filled in, and a workbook file without it.
+  async function setUpStart() {
     const google = CN.google.enabled;
-    $('start-google').hidden = !google;
-    $('start-file').hidden = google;
-    $('privacy').textContent = google
+    $('privacy').textContent = google || CN.google.canOpen
       ? "The data goes straight from Google Sheets to this browser and isn't stored anywhere else."
       : 'The file is read inside this browser. Nothing is uploaded or saved.';
+    $('start-google').hidden = true;
+    $('start-file').hidden = true;
+    if (CN.google.canOpen && await openShared()) return;
+    $('start-google').hidden = !google;
+    $('start-file').hidden = google;
     if (!google) return;
     const saved = CN.google.remembered();
     if (saved) $('google-hint').textContent = `Sign in with Google to load ${saved.name}.`;
@@ -272,7 +299,7 @@
     for (const id of ['open-file', 'open-file-alt', 'status-open']) $(id).addEventListener('click', pick);
     $('google-signin').addEventListener('click', () => loadFromGoogle());
     $('status-google').addEventListener('click', () => loadFromGoogle());
-    $('status-refresh').addEventListener('click', () => loadFromGoogle());
+    $('status-refresh').addEventListener('click', () => (book && book.signedIn === false ? openShared() : loadFromGoogle()));
     $('status-choose').addEventListener('click', () => loadFromGoogle({ choose: true }));
     // Reloading drops the sign-in and the data, which live only in this page's memory.
     $('status-signout').addEventListener('click', () => location.reload());

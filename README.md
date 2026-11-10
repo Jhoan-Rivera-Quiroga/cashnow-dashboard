@@ -9,9 +9,14 @@ It has every page of the Power BI report: **Pick Ups** with its **Pick Up Detail
 
 ## Your data stays out of this repository
 
-This repository holds code only. The data lives in a Google Sheet that only the people it's shared
-with can open. Each viewer signs in with Google, and their browser reads the sheet straight from
-Google. The data never passes through any other server and isn't saved anywhere.
+This repository holds code only. The data lives in a Google Sheet, and each viewer's browser reads it
+straight from Google. It never passes through any other server and isn't saved anywhere.
+
+When the sheet is shared with **Anyone with the link**, the dashboard opens it without sign-in, so
+anyone who opens the dashboard sees the data. The sheet's ID is in `js/config.js`, in this public
+repository, so anyone who reads the code can open the sheet too. With the sheet's General access set
+to **Restricted** instead, the dashboard asks each viewer to sign in with Google, and only the accounts
+the sheet is shared with can see the data.
 
 A workbook file (`Historical Raw Data.xlsx`) can still be opened instead. It's read inside the browser
 and never uploaded. `.gitignore` blocks Excel, CSV and `.pbix` files so they can't be committed by
@@ -25,12 +30,14 @@ them. They load only once Google sign-in is set up in `js/config.js`.
 
 ## Using it
 
-1. Open the site: https://jhoan-rivera-quiroga.github.io/cashnow-dashboard/
-2. Click **Sign in with Google** and use the Google account the data sheet is shared with.
-3. The first time, select the data sheet in Google's file chooser.
+Open the site: https://jhoan-rivera-quiroga.github.io/cashnow-dashboard/. When the sheet is shared
+with Anyone with the link, the data loads right away. Otherwise:
 
-At the bottom of the page, **Refresh** loads the latest rows and **Sign out** clears the data from the
-page. **Choose another sheet** appears when `js/config.js` doesn't name the sheet.
+1. Click **Sign in with Google** and use the Google account the data sheet is shared with.
+2. The first time, select the data sheet in Google's file chooser.
+
+At the bottom of the page, **Refresh** loads the latest rows. After a sign-in, **Sign out** clears the
+data from the page, and **Choose another sheet** appears when `js/config.js` doesn't name the sheet.
 
 To use a file instead, choose **open a workbook file** on the start page, or drop the file on the page.
 
@@ -115,7 +122,8 @@ This is done once, in a Google Cloud project:
   `https://jhoan-rivera-quiroga.github.io` and `http://localhost:8000`.
 - Create an API key. Restrict it to these websites: `https://jhoan-rivera-quiroga.github.io/*`,
   `https://docs.google.com/*` (Google's file chooser runs there) and `http://localhost:8000/*`.
-  Restrict it to the Google Picker API.
+  Restrict it to the Google Picker API, and also to the Google Sheets API for opening without sign-in
+  (below).
 
 Then put the client ID and the API key in `js/config.js`. Neither one is a secret: every browser that
 opens the page can see them, and they only work from the addresses above.
@@ -127,6 +135,17 @@ in browsers that block third-party cookies, such as Safari on iPhone, so do that
 computer. The ID opens nothing for anyone the sheet isn't shared with.
 
 To let someone in, share the Google Sheet with their Google account. **Viewer** access is enough.
+
+To let anyone with the dashboard's address see the data without signing in:
+
+- In Google Sheets, choose **Share** and set General access to **Anyone with the link**, as **Viewer**.
+- In Google Cloud, under **APIs & Services**, **Credentials**, open the API key and add the
+  **Google Sheets API** to its API restrictions, next to the Google Picker API.
+- Keep the sheet's ID in `js/config.js`.
+
+The dashboard then reads the sheet with the API key as soon as it opens. When Google refuses that
+(the sheet is Restricted again, or the key may not read Google Sheets), it offers **Sign in with
+Google** instead.
 
 The first time someone signs in, Google asks them to let the dashboard "see, edit, create and delete
 only the specific Google Drive files you use with this app". That is Google's standard wording for the
