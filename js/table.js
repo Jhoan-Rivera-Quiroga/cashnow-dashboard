@@ -73,7 +73,7 @@
 
     // "Total" across the columns before the first number column, then each number column's sum.
     function totals() {
-      if (firstNumber < 0) {
+      if (firstNumber < 0 || !T.rows.length) { // an empty table has no total row
         table.tFoot.textContent = '';
         return;
       }

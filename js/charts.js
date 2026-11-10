@@ -20,13 +20,22 @@
   const esc = s => String(s).replace(/[&<>"']/g, c => ESC[c]);
   const hint = text => `<br><span style="color:#8a7a88">${text}</span>`;
 
-  // A message in place of a chart; a size above 13 also makes it bold.
-  const empty = (text, size = 13) => ({
+  // A message in place of a chart. "Select a date to see data" is larger and bold.
+  const empty = (text, size = text === CN.ranges.NO_DATES ? 16 : 13) => ({
     graphic: {
       type: 'text', left: 'center', top: 'middle',
       style: { text, fill: MUTED, fontSize: size, fontWeight: size > 13 ? 600 : 'normal', fontFamily: FONT() },
     },
   });
+
+  // Trend charts showing a message instead of their line. A trend redraws by merging into its last
+  // drawing, which would keep the message, so line() clears these first.
+  const showingMessage = new WeakSet();
+  function message(chart, text) {
+    chart.dispatchAction({ type: 'hideTip' });
+    chart.setOption(empty(text), true);
+    showingMessage.add(chart);
+  }
 
   // Bar items for every code with an amount, largest first, at most n of them.
   function ranked(sums, labels, n = Infinity) {
@@ -135,6 +144,7 @@
   // (dollars rather than a count), pct (shares from 0 to 1, on a 0–100% axis; a null value leaves a
   // gap), unit (what a count counts, or what a share is of, for the tooltip) }.
   function line(chart, keys, values, opts) {
+    if (showingMessage.delete(chart)) chart.clear();
     const g = opts.gran;
     const sel = opts.sel === null ? -1 : keys.indexOf(opts.sel);
     const dim = sel >= 0;
@@ -218,5 +228,5 @@
     });
   }
 
-  CN.charts = { ranked, bars, pie, line, pointAt, fitKpis, empty, esc, hint, font: FONT, INK, MUTED, PIE_COLORS, GRAY };
+  CN.charts = { ranked, bars, pie, line, message, pointAt, fitKpis, empty, esc, hint, font: FONT, INK, MUTED, PIE_COLORS, GRAY };
 })(window.CashNow = window.CashNow || {});

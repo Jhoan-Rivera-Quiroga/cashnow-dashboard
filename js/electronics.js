@@ -5,7 +5,7 @@
   'use strict';
   const F = CN.fmt;
   const $ = id => document.getElementById(id);
-  const PRESETS = CN.ranges.PRESETS;
+  const R = CN.ranges;
   // Power BI's table shows only the year of the date, which merges a seller's sales of one model
   // within a year; here each day is its own row.
   const TABLE_COLUMNS = [
@@ -18,17 +18,21 @@
 
   let E = null, problem = null; // electronics rows from CN.data, or null and why there are none
   let chart = null, table = null;
-  const S = { preset: 'last4', from: 0, to: 0, sel: null }; // sel: { key, label } of a Marketing Name
+  let dates = null; // the Date and Range controls
+  const S = Object.assign(R.noDates(), { sel: null }); // sel: { key, label } of a Marketing Name
+  let lo = 1, hi = 0; // the days the dates cover; none before a date is picked
 
   const lower = s => s.toLowerCase();
   const modelLabel = code => (code < 0 ? '(Blank)' : E.labels.model[code]);
-  const presetRange = id => CN.ranges.range(id, E.minDay, E.maxDay);
-  const inRange = i => E.day[i] >= S.from && E.day[i] <= S.to;
+  const inRange = i => E.day[i] >= lo && E.day[i] <= hi;
   const picked = i => !S.sel || lower(modelLabel(E.model[i])) === S.sel.key;
 
   // One pass: what each model was paid (date range only) and the cards and table, which also
   // respect the selected model. Table rows are a day's devices of one model from one seller.
   function render() {
+    const dated = R.picked(S);
+    if (!dated) S.sel = null;
+    [lo, hi] = R.span(S, E.minDay, E.maxDay) || [1, 0];
     syncControls();
     const L = E.labels;
     const byModel = new Float64Array(L.model.length + 1); // the last slot: no model
@@ -50,9 +54,13 @@
       r.paid += E.amount[i];
     }
 
-    setKpi('elec-kpi-units', F.int(units), `${F.num(units)} devices bought`);
-    setKpi('elec-kpi-paid', '$' + F.short(paid), F.money(paid));
-    setKpi('elec-kpi-avg', units ? F.money(paid / units) : '–', units ? 'Amount paid ÷ devices bought' : '');
+    if (dated) {
+      setKpi('elec-kpi-units', F.int(units), `${F.num(units)} devices bought`);
+      setKpi('elec-kpi-paid', '$' + F.short(paid), F.money(paid));
+      setKpi('elec-kpi-avg', units ? F.money(paid / units) : '–', units ? 'Amount paid ÷ devices bought' : '');
+    } else {
+      for (const id of ['elec-kpi-units', 'elec-kpi-paid', 'elec-kpi-avg']) setKpi(id, '–', R.NO_DATES);
+    }
     CN.charts.fitKpis($('view-electronics'));
 
     const models = [];
@@ -61,10 +69,14 @@
     }
     models.forEach(it => { it.key = lower(it.label); });
     models.sort((a, b) => b.value - a.value);
-    CN.charts.bars(chart, models, { selKey: S.sel ? S.sel.key : null, empty: 'No electronics bought in this date range', hint: 'Click to filter the table' });
+    CN.charts.bars(chart, models, {
+      selKey: S.sel ? S.sel.key : null, hint: 'Click to filter the table',
+      empty: dated ? 'No electronics bought in this date range' : R.NO_DATES,
+    });
 
     table.set([...groups.values()]);
-    $('elec-context').textContent = [rangePhrase(), S.sel ? S.sel.label : '', F.count(table.length, 'row', 'rows')].filter(Boolean).join(' · ');
+    $('elec-context').textContent = !dated ? R.NO_DATES
+      : [rangePhrase(), S.sel ? S.sel.label : '', F.count(table.length, 'row', 'rows')].filter(Boolean).join(' · ');
     $('elec-export').disabled = !table.length;
     $('elec-selection').hidden = !S.sel;
     if (S.sel) $('elec-selection-label').textContent = S.sel.label;
@@ -78,12 +90,10 @@
   }
 
   function syncControls() {
-    $('elec-from').value = F.iso(S.from);
-    $('elec-to').value = F.iso(S.to);
-    $('elec-preset').value = S.preset;
+    dates.sync();
   }
 
-  const rangePhrase = () => (S.from === S.to ? F.dayLong(S.from) : `${F.dayLong(S.from)} – ${F.dayLong(S.to)}`);
+  const rangePhrase = () => R.phrase(S, E.minDay, E.maxDay);
 
   function ensureChart() {
     if (chart) return;
@@ -101,26 +111,13 @@
 
   function toParams() {
     const p = new URLSearchParams();
-    p.set('range', S.preset);
-    if (S.preset === 'custom') {
-      p.set('from', F.iso(S.from));
-      p.set('to', F.iso(S.to));
-    }
+    R.toParams(p, S);
     if (S.sel) p.set('model', S.sel.label);
     return p.toString();
   }
 
   function applyParams(p) {
-    const range = p.get('range');
-    const from = F.fromIso(p.get('from')), to = F.fromIso(p.get('to'));
-    if (PRESETS[range] && range !== 'custom') {
-      S.preset = range;
-      [S.from, S.to] = presetRange(range);
-    } else if (from !== null && to !== null) {
-      S.preset = 'custom';
-      S.from = Math.min(from, to);
-      S.to = Math.max(from, to);
-    }
+    R.applyParams(p, S, E.minDay, E.maxDay);
     const model = p.get('model');
     S.sel = model ? { key: lower(model), label: model } : null;
   }
@@ -134,32 +131,14 @@
   /* ---------- wiring ---------- */
 
   function init() {
-    const preset = $('elec-preset');
-    for (const [id, p] of Object.entries(PRESETS)) preset.add(new Option(p.name, id));
-    preset.addEventListener('change', () => {
-      if (preset.value === 'custom') return;
-      S.preset = preset.value;
-      [S.from, S.to] = presetRange(preset.value);
-      render();
-    });
-    const onDate = () => {
-      let a = F.fromIso($('elec-from').value), b = F.fromIso($('elec-to').value);
-      if (a === null || b === null) return;
-      if (a > b) [a, b] = [b, a];
-      S.from = a;
-      S.to = b;
-      S.preset = 'custom';
-      render();
-    };
-    $('elec-from').addEventListener('change', onDate);
-    $('elec-to').addEventListener('change', onDate);
+    dates = R.controls({ from: 'elec-from', to: 'elec-to', preset: 'elec-preset' }, S, () => [E.minDay, E.maxDay], render);
     $('elec-clear').addEventListener('click', () => { S.sel = null; render(); });
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape' && S.sel && document.body.dataset.view === 'electronics') { S.sel = null; render(); }
     });
     new ResizeObserver(() => CN.charts.fitKpis($('view-electronics'))).observe($('elec-kpis'));
     table = CN.table.create({ table: 'elec-table', more: 'elec-more' }, TABLE_COLUMNS);
-    $('elec-export').addEventListener('click', () => table.download(`electronics_${F.iso(S.from)}_to_${F.iso(S.to)}.csv`));
+    $('elec-export').addEventListener('click', () => table.download(`electronics_${F.iso(lo)}_to_${F.iso(hi)}.csv`));
   }
 
   function load(book) {
@@ -174,12 +153,8 @@
     $('elec-problem').textContent = E ? '' : `${problem} The Electronics page needs that sheet, with the columns ` +
       'Collection Date, First Name, Marketing Name, Quantity and Comments (the amount paid).';
     if (!E) return;
-    Object.assign(S, { preset: 'last4', sel: null });
-    [S.from, S.to] = presetRange('last4');
-    for (const id of ['elec-from', 'elec-to']) {
-      $(id).min = F.iso(E.minDay);
-      $(id).max = F.iso(E.maxDay);
-    }
+    Object.assign(S, R.noDates(), { sel: null });
+    dates.limit(E.minDay, E.maxDay);
   }
 
   function show(params) {
@@ -197,7 +172,7 @@
       cards: ['elec-kpi-units', 'elec-kpi-paid', 'elec-kpi-avg'].map(id => $(id).textContent),
       models: opts.yAxis && opts.yAxis[0].data ? opts.yAxis[0].data.map((m, i) => [m, round(opts.series[0].data[i].value)]) : [],
       rows: table.length,
-      total: $('elec-table').tFoot.querySelector('[data-total="paid"]').textContent,
+      total: ($('elec-table').tFoot.querySelector('[data-total="paid"]') || {}).textContent || null,
     };
   }
 

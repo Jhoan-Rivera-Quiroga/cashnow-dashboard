@@ -4,29 +4,24 @@
   'use strict';
   const F = CN.fmt;
   const $ = id => document.getElementById(id);
-  const { PRESETS, GRAN } = CN.ranges;
+  const R = CN.ranges, { GRAN } = R;
 
   let P = null; // pick-up columns from CN.data
   let charts = null;
   let last = null; // latest compute() result
   let table = null; // the Pick Up Detail table
-  // The page opens with no dates and shows numbers once one is picked. A date left blank (null) leaves
-  // that end open: the first or last day in the data.
-  const S = { preset: '', from: null, to: null, g: 'monthly', states: null, sel: null };
-  const NO_DATES = 'Select a date to see data';
-  let blank = false; // the charts show NO_DATES
+  let dates = null; // the Date and Range controls
+  const S = Object.assign(R.noDates(), { g: 'monthly', states: null, sel: null });
 
   const label = (field, code) => (code < 0 ? '' : P.labels[field][code]);
   const stateLabel = code => (code < 0 ? '(Blank)' : P.labels.state[code]);
-
-  const presetRange = id => CN.ranges.range(id, P.minDay, P.maxDay);
-  const noDates = () => S.from === null && S.to === null;
-  const span = () => [S.from === null ? P.minDay : S.from, S.to === null ? P.maxDay : S.to];
+  const span = () => R.span(S, P.minDay, P.maxDay);
 
   // A test for the rows in the current dates and states; nothing passes before a date is picked.
   function scope() {
-    if (noDates()) return () => false;
-    const [a, b] = span();
+    const s = span();
+    if (!s) return () => false;
+    const [a, b] = s;
     return i => P.day[i] >= a && P.day[i] <= b && (!S.states || S.states.has(P.state[i]));
   }
 
@@ -76,7 +71,7 @@
 
   function render() {
     syncControls();
-    if (noDates()) {
+    if (!R.picked(S)) {
       renderEmpty();
     } else {
       let r = compute();
@@ -97,20 +92,17 @@
   function renderEmpty() {
     last = null;
     S.sel = null;
-    for (const id of ['kpi-cash', 'kpi-pickups', 'kpi-avg']) setKpi(id, '–', NO_DATES);
+    for (const id of ['kpi-cash', 'kpi-pickups', 'kpi-avg']) setKpi(id, '–', R.NO_DATES);
     for (const id of ['kpi-product', 'kpi-driver', 'kpi-vendor']) setTop(id, null);
     const btn = $('details-btn');
     btn.disabled = true;
-    btn.title = NO_DATES;
-    charts.forEach(c => c.setOption(CN.charts.empty(NO_DATES, 16), true));
-    blank = true;
+    btn.title = R.NO_DATES;
+    charts.forEach(c => CN.charts.message(c, R.NO_DATES));
     CN.charts.fitKpis($('view-pickups'));
   }
 
   function syncControls() {
-    $('date-from').value = S.from === null ? '' : F.iso(S.from);
-    $('date-to').value = S.to === null ? '' : F.iso(S.to);
-    $('date-preset').value = S.preset;
+    dates.sync();
     $('granularity').value = S.g;
     $('state-summary').textContent = stateSummary();
   }
@@ -158,20 +150,14 @@
   }
 
   function renderCharts(r) {
-    if (blank) {
-      charts.forEach(c => c.clear()); // drop the prompt, which a trend's update would otherwise keep
-      blank = false;
-    }
     const opts = { gran: GRAN[S.g], sel: S.sel };
     CN.charts.line(charts[0], r.keys, r.cashSeries, Object.assign({ money: true }, opts));
     CN.charts.line(charts[1], r.keys, r.pickSeries, Object.assign({ unit: 'pick-ups' }, opts));
   }
 
   function scopePhrase() {
-    if (noDates()) return 'No dates selected';
     if (S.sel !== null) return GRAN[S.g].phrase(S.sel);
-    const [a, b] = span();
-    return a === b ? F.dayLong(a) : `${F.dayLong(a)} – ${F.dayLong(b)}`;
+    return R.phrase(S, P.minDay, P.maxDay);
   }
 
   /* ---------- State slicer ---------- */
@@ -222,13 +208,7 @@
 
   function toParams() {
     const p = new URLSearchParams();
-    if (!noDates()) {
-      p.set('range', S.preset);
-      if (S.preset === 'custom') {
-        if (S.from !== null) p.set('from', F.iso(S.from));
-        if (S.to !== null) p.set('to', F.iso(S.to));
-      }
-    }
+    R.toParams(p, S);
     p.set('g', S.g);
     if (S.states) p.set('state', [...S.states].map(stateLabel).join('|'));
     if (S.sel !== null) p.set('sel', F.iso(S.sel));
@@ -237,16 +217,7 @@
 
   function applyParams(p) {
     if (GRAN[p.get('g')]) S.g = p.get('g');
-    const range = p.get('range');
-    const from = F.fromIso(p.get('from')), to = F.fromIso(p.get('to'));
-    if (PRESETS[range] && range !== 'custom') {
-      S.preset = range;
-      [S.from, S.to] = presetRange(range);
-    } else if (from !== null || to !== null) {
-      S.preset = 'custom';
-      S.from = from !== null && to !== null ? Math.min(from, to) : from;
-      S.to = from !== null && to !== null ? Math.max(from, to) : to;
-    }
+    R.applyParams(p, S, P.minDay, P.maxDay);
     const st = p.get('state');
     if (st) {
       const want = new Set(st.toLowerCase().split('|'));
@@ -284,7 +255,7 @@
   function pickupsDetail() {
     const bucket = P.bucket[S.g];
     const inScope = scope();
-    const [a, b] = span();
+    const [a, b] = span() || [P.minDay, P.maxDay];
     return {
       match: i => inScope(i) && (S.sel === null || bucket[i] === S.sel),
       phrase: `${scopePhrase()} · State: ${stateSummary()}`,
@@ -328,27 +299,7 @@
   /* ---------- wiring ---------- */
 
   function init() {
-    const preset = $('date-preset');
-    const none = new Option('Select a range', ''); // shown until a range is picked
-    none.disabled = true;
-    none.hidden = true;
-    preset.add(none);
-    for (const [id, p] of Object.entries(PRESETS)) preset.add(new Option(p.name, id));
-    preset.addEventListener('change', () => {
-      if (preset.value === 'custom') return;
-      S.preset = preset.value;
-      [S.from, S.to] = presetRange(preset.value);
-      render();
-    });
-    // One date is enough: a blank one leaves that end open. Clearing both empties the page again.
-    const onDate = () => {
-      let a = F.fromIso($('date-from').value), b = F.fromIso($('date-to').value);
-      if (a !== null && b !== null && a > b) [a, b] = [b, a];
-      Object.assign(S, { preset: a === null && b === null ? '' : 'custom', from: a, to: b });
-      render();
-    };
-    $('date-from').addEventListener('change', onDate);
-    $('date-to').addEventListener('change', onDate);
+    dates = R.controls({ from: 'date-from', to: 'date-to', preset: 'date-preset' }, S, () => [P.minDay, P.maxDay], render);
     $('granularity').addEventListener('change', e => {
       S.g = e.target.value;
       S.sel = null;
@@ -375,11 +326,8 @@
 
   function load(data) {
     P = data;
-    Object.assign(S, { preset: '', from: null, to: null, g: 'monthly', states: null, sel: null });
-    for (const id of ['date-from', 'date-to']) {
-      $(id).min = F.iso(P.minDay);
-      $(id).max = F.iso(P.maxDay);
-    }
+    Object.assign(S, R.noDates(), { g: 'monthly', states: null, sel: null });
+    dates.limit(P.minDay, P.maxDay);
     buildStateOptions();
   }
 

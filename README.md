@@ -43,10 +43,11 @@ To use a file instead, choose **open a workbook file** on the start page, or dro
 
 The page works like the Power BI one:
 
-- The page opens with no dates and says "Select a date to see data". Pick a start or an end date (one
-  is enough: the other end is the first or last day in the data), or a **Range** choice such as
-  *Last 4 months* or *Year to date*, counted back from the latest date in the data. **State** and
-  **Dynamic Date** (Daily / Weekly / Monthly) filter the page too.
+- Like every page, it opens with no dates and says "Select a date to see data". Pick a start or an
+  end date (one is enough: the other end is the first or last day in the data), or a **Range** choice
+  such as *Last 4 months* or *Year to date*, counted back from the latest date in the data. Clearing
+  both dates empties the page again. **State** and **Dynamic Date** (Daily / Weekly / Monthly) filter
+  the page too.
 - Clicking a point in either chart filters the cards to that day, week or month. Click it again, press
   Esc or use **Clear** to undo.
 - **Details** lists the pick-ups behind the current view. Without a selected point it lists the whole

@@ -9,19 +9,22 @@
   // A category keeps its color whatever is filtered; past seven categories the rest share "Other".
   const { PIE_COLORS: COLORS, GRAY } = CN.charts;
   const KINDS = ['driver', 'concept', 'bonus']; // what can be selected, and its address parameter
-  const PRESETS = CN.ranges.PRESETS;
+  const R = CN.ranges;
 
   let P = null, Q = null, problem = null; // pick-ups; payouts, or null and why there are none
   let K = null; // per-code lookups for the payouts
   let charts = null;
   let narrowPies = false; // pie labels are left to the legend on narrow cards
   let first = 0, last = 0; // first and last day across pick-ups and payouts
+  let lo = 1, hi = 0; // the days the dates cover; none before a date is picked
   let view = 'drivers'; // or 'details'
-  const S = { preset: 'last4', from: 0, to: 0, sel: null }; // sel: { kind, key, label }
+  const S = Object.assign(R.noDates(), { sel: null }); // sel: { kind, key, label }
   let table = null; // the Driver Payout Detail table
+  let dates = null; // the Date and Range controls
 
   const lower = s => s.toLowerCase();
-  const presetRange = id => CN.ranges.range(id, first, last);
+  // Sets lo and hi from the dates, before a pass over the rows.
+  const bound = () => { [lo, hi] = R.span(S, first, last) || [1, 0]; };
 
   // Lowercased names to match the selection on, and each category's color slot.
   function lookups() {
@@ -41,7 +44,7 @@
     };
   }
 
-  const inRange = d => d >= S.from && d <= S.to;
+  const inRange = d => d >= lo && d <= hi;
   const picked = (kind, key) => !S.sel || S.sel.kind !== kind || S.sel.key === key;
 
   // Whether payout row i passes each part of the selection.
@@ -59,6 +62,7 @@
   // Each payout chart is filtered by what's selected in the other charts, and shows its own
   // selection highlighted instead, as in Power BI.
   function compute() {
+    bound();
     const cash = new Float64Array(P.labels.driver.length);
     for (let i = 0; i < P.n; i++) if (P.driver[i] >= 0 && inRange(P.day[i])) cash[P.driver[i]] += P.amount[i];
     const r = { cash: CN.charts.ranked(cash, P.labels.driver), total: null };
@@ -105,18 +109,20 @@
   /* ---------- page ---------- */
 
   function render() {
+    const dated = R.picked(S);
+    if (!dated) S.sel = null;
     const r = compute();
     syncControls();
     const total = $('drv-total');
-    total.textContent = r.total === null ? '–' : '$' + F.short(r.total);
-    total.closest('.kpi').title = r.total === null ? '' : F.money(r.total);
+    total.textContent = r.total === null || !dated ? '–' : '$' + F.short(r.total);
+    total.closest('.kpi').title = r.total === null || !dated ? '' : F.money(r.total);
     const btn = $('drv-details-btn');
     btn.disabled = !r.lines;
-    btn.title = r.lines ? `List the payouts for ${scopePhrase()}` : 'No payouts to list';
+    btn.title = !dated ? R.NO_DATES : r.lines ? `List the payouts for ${scopePhrase()}` : 'No payouts to list';
     $('drv-selection').hidden = !S.sel;
     if (S.sel) $('drv-selection-label').textContent = selectionPhrase();
     const sel = kind => (S.sel && S.sel.kind === kind ? S.sel.key : null);
-    CN.charts.bars(charts.cash, r.cash, { selKey: sel('driver'), empty: 'No pick-ups in this date range', hint: "Click to see this driver's payouts" });
+    CN.charts.bars(charts.cash, r.cash, { selKey: sel('driver'), empty: dated ? 'No pick-ups in this date range' : R.NO_DATES, hint: "Click to see this driver's payouts" });
     if (Q) {
       narrowPies = charts.concept.getWidth() < 420;
       CN.charts.bars(charts.payouts, r.payouts, { selKey: sel('driver'), empty: emptyPhrase('payouts'), hint: 'Click to filter the payout charts' });
@@ -131,17 +137,16 @@
     return kind === 'driver' ? label : kind === 'concept' ? `${label} payouts` : `${label} bonuses`;
   }
 
-  const rangePhrase = () => (S.from === S.to ? F.dayLong(S.from) : `${F.dayLong(S.from)} – ${F.dayLong(S.to)}`);
+  const rangePhrase = () => R.phrase(S, first, last);
   const scopePhrase = () => (S.sel ? `${selectionPhrase()}, ${rangePhrase()}` : rangePhrase());
 
   function emptyPhrase(what) {
+    if (!R.picked(S)) return R.NO_DATES;
     return S.sel ? `Nothing to show for ${selectionPhrase()} in this date range` : `No ${what} in this date range`;
   }
 
   function syncControls() {
-    $('drv-from').value = F.iso(S.from);
-    $('drv-to').value = F.iso(S.to);
-    $('drv-preset').value = S.preset;
+    dates.sync();
   }
 
   function setPie(chart, items, selKey, donut, emptyText) {
@@ -189,6 +194,7 @@
   // The payout lines behind the total: one row per date, driver, concept and note, with the amounts
   // summed, as a Power BI table shows them.
   function renderDetails() {
+    bound();
     const groups = new Map();
     for (let i = 0; Q && i < Q.n; i++) {
       if (!inRange(Q.day[i])) continue;
@@ -217,26 +223,13 @@
 
   function toParams() {
     const p = new URLSearchParams();
-    p.set('range', S.preset);
-    if (S.preset === 'custom') {
-      p.set('from', F.iso(S.from));
-      p.set('to', F.iso(S.to));
-    }
+    R.toParams(p, S);
     if (S.sel) p.set(S.sel.kind, S.sel.label);
     return p.toString();
   }
 
   function applyParams(p) {
-    const range = p.get('range');
-    const from = F.fromIso(p.get('from')), to = F.fromIso(p.get('to'));
-    if (PRESETS[range] && range !== 'custom') {
-      S.preset = range;
-      [S.from, S.to] = presetRange(range);
-    } else if (from !== null && to !== null) {
-      S.preset = 'custom';
-      S.from = Math.min(from, to);
-      S.to = Math.max(from, to);
-    }
+    R.applyParams(p, S, first, last);
     S.sel = null;
     for (const kind of KINDS) {
       const label = p.get(kind);
@@ -253,25 +246,7 @@
   /* ---------- wiring ---------- */
 
   function init() {
-    const preset = $('drv-preset');
-    for (const [id, p] of Object.entries(PRESETS)) preset.add(new Option(p.name, id));
-    preset.addEventListener('change', () => {
-      if (preset.value === 'custom') return;
-      S.preset = preset.value;
-      [S.from, S.to] = presetRange(preset.value);
-      render();
-    });
-    const onDate = () => {
-      let a = F.fromIso($('drv-from').value), b = F.fromIso($('drv-to').value);
-      if (a === null || b === null) return;
-      if (a > b) [a, b] = [b, a];
-      S.from = a;
-      S.to = b;
-      S.preset = 'custom';
-      render();
-    };
-    $('drv-from').addEventListener('change', onDate);
-    $('drv-to').addEventListener('change', onDate);
+    dates = R.controls({ from: 'drv-from', to: 'drv-to', preset: 'drv-preset' }, S, () => [first, last], render);
     $('drv-clear').addEventListener('click', () => { S.sel = null; render(); });
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape' && S.sel && document.body.dataset.view === 'drivers') { S.sel = null; render(); }
@@ -283,7 +258,8 @@
     });
     table = CN.table.create({ table: 'drv-details-table', more: 'drv-details-more' }, DETAIL_COLUMNS);
     $('drv-details-export').addEventListener('click', () => {
-      table.download(`driver-payout-detail_${F.iso(S.from)}_to_${F.iso(S.to)}.csv`);
+      const [a, b] = R.span(S, first, last) || [first, last];
+      table.download(`driver-payout-detail_${F.iso(a)}_to_${F.iso(b)}.csv`);
     });
   }
 
@@ -298,12 +274,8 @@
       first = Math.min(first, Q.minDay);
       last = Math.max(last, Q.maxDay);
     }
-    Object.assign(S, { preset: 'last4', sel: null });
-    [S.from, S.to] = presetRange('last4');
-    for (const id of ['drv-from', 'drv-to']) {
-      $(id).min = F.iso(first);
-      $(id).max = F.iso(last);
-    }
+    Object.assign(S, R.noDates(), { sel: null });
+    dates.limit(first, last);
     for (const id of ['drv-card-payouts', 'drv-card-concept', 'drv-card-bonus']) $(id).hidden = !Q;
     $('drv-problem').hidden = Boolean(Q);
     $('drv-problem').textContent = Q ? '' : `${problem} The payout charts need that sheet, with the columns ` +

@@ -6,22 +6,26 @@
   const F = CN.fmt;
   const $ = id => document.getElementById(id);
   const KINDS = { product: 'Product', vendor: 'Vendor', category: 'Category' }; // address parameter: name
-  const PRESETS = CN.ranges.PRESETS;
+  const R = CN.ranges;
   const CLICK = 'Click to filter the other charts';
 
   let P = null; // pick-up columns from CN.data
   let keys = null; // lowercased labels of each field, to match the selection on
   let charts = null;
-  const S = { preset: 'last4', from: 0, to: 0, sel: null }; // sel: { kind, key, label }
+  let dates = null; // the Date and Range controls
+  const S = Object.assign(R.noDates(), { sel: null }); // sel: { kind, key, label }
+  let lo = 1, hi = 0; // the days the dates cover; none before a date is picked
 
   const lower = s => s.toLowerCase();
-  const presetRange = id => CN.ranges.range(id, P.minDay, P.maxDay);
-  const inRange = d => d >= S.from && d <= S.to;
+  // Sets lo and hi from the dates, before a pass over the rows.
+  const bound = () => { [lo, hi] = R.span(S, P.minDay, P.maxDay) || [1, 0]; };
+  const inRange = d => d >= lo && d <= hi;
   const picked = (kind, code) => !S.sel || S.sel.kind !== kind || (code >= 0 ? keys[kind][code] : '(blank)') === S.sel.key;
 
   // Each chart is filtered by what's selected in the others and shows its own selection highlighted,
   // as in Power BI. The two product charts share the product selection.
   function compute() {
+    bound();
     const L = P.labels;
     const cash = new Float64Array(L.product.length), units = new Float64Array(L.product.length);
     const vendors = new Float64Array(L.vendor.length);
@@ -52,6 +56,7 @@
   /* ---------- page ---------- */
 
   function render() {
+    if (!R.picked(S)) S.sel = null;
     const r = compute();
     syncControls();
     const sel = kind => (S.sel && S.sel.kind === kind ? S.sel.key : null);
@@ -65,20 +70,20 @@
     });
     const btn = $('ins-details-btn');
     btn.disabled = !r.lines;
-    btn.title = r.lines ? `List the pick-ups for ${S.sel ? selectionPhrase() + ', ' : ''}${rangePhrase()}` : 'No pick-ups to list';
+    btn.title = !R.picked(S) ? R.NO_DATES
+      : r.lines ? `List the pick-ups for ${S.sel ? selectionPhrase() + ', ' : ''}${rangePhrase()}` : 'No pick-ups to list';
     $('ins-selection').hidden = !S.sel;
     if (S.sel) $('ins-selection-label').textContent = selectionPhrase();
     saveHash();
   }
 
   const selectionPhrase = () => `${KINDS[S.sel.kind]}: ${S.sel.label}`;
-  const rangePhrase = () => (S.from === S.to ? F.dayLong(S.from) : `${F.dayLong(S.from)} – ${F.dayLong(S.to)}`);
-  const emptyPhrase = () => (S.sel ? `Nothing to show for ${S.sel.label} in this date range` : 'No pick-ups in this date range');
+  const rangePhrase = () => R.phrase(S, P.minDay, P.maxDay);
+  const emptyPhrase = () => (!R.picked(S) ? R.NO_DATES
+    : S.sel ? `Nothing to show for ${S.sel.label} in this date range` : 'No pick-ups in this date range');
 
   function syncControls() {
-    $('ins-from').value = F.iso(S.from);
-    $('ins-to').value = F.iso(S.to);
-    $('ins-preset').value = S.preset;
+    dates.sync();
   }
 
   // Clicking a selected bar again clears the selection.
@@ -106,6 +111,8 @@
 
   // The pick-ups behind the view, in the Pick Up Detail table.
   function details() {
+    bound();
+    const [a, b] = R.span(S, P.minDay, P.maxDay) || [P.minDay, P.maxDay];
     CN.pickups.detail({
       match: i => inRange(P.day[i]) && picked('product', P.product[i]) && picked('vendor', P.vendor[i]) &&
         picked('category', P.category[i]),
@@ -113,7 +120,7 @@
       hash: `#/insights/details?${toParams()}`,
       back: `#/insights?${toParams()}`,
       backLabel: 'Back to Insights',
-      file: `pick-up-detail_${F.iso(S.from)}_to_${F.iso(S.to)}.csv`,
+      file: `pick-up-detail_${F.iso(a)}_to_${F.iso(b)}.csv`,
     });
   }
 
@@ -121,26 +128,13 @@
 
   function toParams() {
     const p = new URLSearchParams();
-    p.set('range', S.preset);
-    if (S.preset === 'custom') {
-      p.set('from', F.iso(S.from));
-      p.set('to', F.iso(S.to));
-    }
+    R.toParams(p, S);
     if (S.sel) p.set(S.sel.kind, S.sel.label);
     return p.toString();
   }
 
   function applyParams(p) {
-    const range = p.get('range');
-    const from = F.fromIso(p.get('from')), to = F.fromIso(p.get('to'));
-    if (PRESETS[range] && range !== 'custom') {
-      S.preset = range;
-      [S.from, S.to] = presetRange(range);
-    } else if (from !== null && to !== null) {
-      S.preset = 'custom';
-      S.from = Math.min(from, to);
-      S.to = Math.max(from, to);
-    }
+    R.applyParams(p, S, P.minDay, P.maxDay);
     S.sel = null;
     for (const kind of Object.keys(KINDS)) {
       const label = p.get(kind);
@@ -157,25 +151,7 @@
   /* ---------- wiring ---------- */
 
   function init() {
-    const preset = $('ins-preset');
-    for (const [id, p] of Object.entries(PRESETS)) preset.add(new Option(p.name, id));
-    preset.addEventListener('change', () => {
-      if (preset.value === 'custom') return;
-      S.preset = preset.value;
-      [S.from, S.to] = presetRange(preset.value);
-      render();
-    });
-    const onDate = () => {
-      let a = F.fromIso($('ins-from').value), b = F.fromIso($('ins-to').value);
-      if (a === null || b === null) return;
-      if (a > b) [a, b] = [b, a];
-      S.from = a;
-      S.to = b;
-      S.preset = 'custom';
-      render();
-    };
-    $('ins-from').addEventListener('change', onDate);
-    $('ins-to').addEventListener('change', onDate);
+    dates = R.controls({ from: 'ins-from', to: 'ins-to', preset: 'ins-preset' }, S, () => [P.minDay, P.maxDay], render);
     $('ins-clear').addEventListener('click', () => { S.sel = null; render(); });
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape' && S.sel && document.body.dataset.view === 'insights') { S.sel = null; render(); }
@@ -186,12 +162,8 @@
   function load(book) {
     P = book.pickups;
     keys = { product: P.labels.product.map(lower), vendor: P.labels.vendor.map(lower), category: P.labels.category.map(lower) };
-    Object.assign(S, { preset: 'last4', sel: null });
-    [S.from, S.to] = presetRange('last4');
-    for (const id of ['ins-from', 'ins-to']) {
-      $(id).min = F.iso(P.minDay);
-      $(id).max = F.iso(P.maxDay);
-    }
+    Object.assign(S, R.noDates(), { sel: null });
+    dates.limit(P.minDay, P.maxDay);
   }
 
   // v: 'insights' for the charts, 'details' for the pick-ups behind them.

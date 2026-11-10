@@ -4,7 +4,7 @@
   'use strict';
   const F = CN.fmt;
   const $ = id => document.getElementById(id);
-  const { PRESETS, GRAN } = CN.ranges;
+  const R = CN.ranges, { GRAN } = R;
   const DETAIL_COLUMNS = [
     { key: 'day', label: 'Date', type: 'day' },
     { key: 'order', label: 'Order Number', type: 'text' },
@@ -18,17 +18,21 @@
   let M = null, problem = null; // mail order rows from CN.data, or null and why there are none
   let charts = null, table = null;
   let last = null; // latest compute() result
-  const S = { preset: 'last4', from: 0, to: 0, g: 'weekly', sel: null };
+  let dates = null; // the Date and Range controls
+  const S = Object.assign(R.noDates(), { g: 'weekly', sel: null });
+  let lo = 1, hi = 0; // the days the dates cover; none before a date is picked
 
   const label = (field, code) => (code < 0 ? '' : M.labels[field][code]);
-  const presetRange = id => CN.ranges.range(id, M.minDay, M.maxDay);
-  const inRange = i => M.day[i] >= S.from && M.day[i] <= S.to;
+  // Sets lo and hi from the dates, before a pass over the rows.
+  const bound = () => { [lo, hi] = R.span(S, M.minDay, M.maxDay) || [1, 0]; };
+  const inRange = i => M.day[i] >= lo && M.day[i] <= hi;
   // An order's product line, as opposed to a day's orders-completed row.
   const isLine = i => M.order[i] >= 0 || M.vendor[i] >= 0 || M.product[i] >= 0 || M.amount[i] !== 0;
 
   // One pass over the rows: the trend series (date range only) and the KPIs, which also respect
   // the selected point. Cash is the lines' Total; orders completed is the sum of Order Qty.
   function compute() {
+    bound();
     const bucket = M.bucket[S.g];
     const series = new Map();
     const byVendor = new Float64Array(M.labels.vendor.length);
@@ -61,6 +65,10 @@
   /* ---------- page ---------- */
 
   function render() {
+    if (!R.picked(S)) {
+      renderEmpty();
+      return;
+    }
     let r = compute();
     if (S.sel !== null && !r.keys.includes(S.sel)) {
       S.sel = null;
@@ -84,6 +92,22 @@
     saveHash();
   }
 
+  // Before a date is picked: no numbers, and the prompt in both charts.
+  function renderEmpty() {
+    S.sel = null;
+    last = null;
+    syncControls();
+    for (const id of ['mail-kpi-vendor', 'mail-kpi-orders', 'mail-kpi-cash']) setKpi(id, '–', R.NO_DATES);
+    $('mail-kpi-vendor-amt').textContent = '';
+    const btn = $('mail-details-btn');
+    btn.disabled = true;
+    btn.title = R.NO_DATES;
+    CN.charts.fitKpis($('view-mail'));
+    charts.forEach(c => CN.charts.message(c, R.NO_DATES));
+    $('mail-selection').hidden = true;
+    saveHash();
+  }
+
   function setKpi(id, text, title) {
     const el = $(id);
     el.textContent = text;
@@ -91,15 +115,13 @@
   }
 
   function syncControls() {
-    $('mail-from').value = F.iso(S.from);
-    $('mail-to').value = F.iso(S.to);
-    $('mail-preset').value = S.preset;
+    dates.sync();
     $('mail-granularity').value = S.g;
   }
 
   function scopePhrase() {
     if (S.sel !== null) return GRAN[S.g].phrase(S.sel);
-    return S.from === S.to ? F.dayLong(S.from) : `${F.dayLong(S.from)} – ${F.dayLong(S.to)}`;
+    return R.phrase(S, M.minDay, M.maxDay);
   }
 
   function ensureCharts() {
@@ -125,8 +147,10 @@
 
   // The Mail Order page's own drill-through: its date range and selected point.
   function mailDetail() {
+    bound();
     const bucket = M.bucket[S.g];
-    const scope = S.sel !== null ? F.iso(S.sel) : `${F.iso(S.from)}_to_${F.iso(S.to)}`;
+    const [a, b] = R.span(S, M.minDay, M.maxDay) || [M.minDay, M.maxDay];
+    const scope = S.sel !== null ? F.iso(S.sel) : `${F.iso(a)}_to_${F.iso(b)}`;
     return {
       match: i => inRange(i) && (S.sel === null || bucket[i] === S.sel),
       phrase: scopePhrase(),
@@ -182,11 +206,7 @@
 
   function toParams() {
     const p = new URLSearchParams();
-    p.set('range', S.preset);
-    if (S.preset === 'custom') {
-      p.set('from', F.iso(S.from));
-      p.set('to', F.iso(S.to));
-    }
+    R.toParams(p, S);
     p.set('g', S.g);
     if (S.sel !== null) p.set('sel', F.iso(S.sel));
     return p.toString();
@@ -194,16 +214,7 @@
 
   function applyParams(p) {
     if (GRAN[p.get('g')]) S.g = p.get('g');
-    const range = p.get('range');
-    const from = F.fromIso(p.get('from')), to = F.fromIso(p.get('to'));
-    if (PRESETS[range] && range !== 'custom') {
-      S.preset = range;
-      [S.from, S.to] = presetRange(range);
-    } else if (from !== null && to !== null) {
-      S.preset = 'custom';
-      S.from = Math.min(from, to);
-      S.to = Math.max(from, to);
-    }
+    R.applyParams(p, S, M.minDay, M.maxDay);
     S.sel = F.fromIso(p.get('sel'));
   }
 
@@ -216,25 +227,7 @@
   /* ---------- wiring ---------- */
 
   function init() {
-    const preset = $('mail-preset');
-    for (const [id, p] of Object.entries(PRESETS)) preset.add(new Option(p.name, id));
-    preset.addEventListener('change', () => {
-      if (preset.value === 'custom') return;
-      S.preset = preset.value;
-      [S.from, S.to] = presetRange(preset.value);
-      render();
-    });
-    const onDate = () => {
-      let a = F.fromIso($('mail-from').value), b = F.fromIso($('mail-to').value);
-      if (a === null || b === null) return;
-      if (a > b) [a, b] = [b, a];
-      S.from = a;
-      S.to = b;
-      S.preset = 'custom';
-      render();
-    };
-    $('mail-from').addEventListener('change', onDate);
-    $('mail-to').addEventListener('change', onDate);
+    dates = R.controls({ from: 'mail-from', to: 'mail-to', preset: 'mail-preset' }, S, () => [M.minDay, M.maxDay], render);
     $('mail-granularity').addEventListener('change', e => {
       S.g = e.target.value;
       S.sel = null;
@@ -262,12 +255,8 @@
     $('mail-problem').textContent = M ? '' : `${problem} The Mail Order page needs that sheet, with the columns ` +
       'Delivery Date, Delivery Order (D.O.) No., First Name, Product Code / Name, Quantity, Total and Order Qty.';
     if (!M) return;
-    Object.assign(S, { preset: 'last4', g: 'weekly', sel: null });
-    [S.from, S.to] = presetRange('last4');
-    for (const id of ['mail-from', 'mail-to']) {
-      $(id).min = F.iso(M.minDay);
-      $(id).max = F.iso(M.maxDay);
-    }
+    Object.assign(S, R.noDates(), { g: 'weekly', sel: null });
+    dates.limit(M.minDay, M.maxDay);
   }
 
   // v: 'mail' for the charts, 'details' for the order lines behind them.

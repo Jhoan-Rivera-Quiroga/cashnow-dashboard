@@ -6,7 +6,7 @@
   'use strict';
   const F = CN.fmt;
   const $ = id => document.getElementById(id);
-  const { PRESETS, GRAN } = CN.ranges;
+  const R = CN.ranges, { GRAN } = R;
   const COUNTS = ['total', 'inbound', 'outbound', 'answered', 'missed'];
   const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -25,10 +25,11 @@
   let K = null, problem = null; // the sheet's days from CN.data, or null and why there are none
   let charts = null, table = null;
   let last = null; // latest compute() result
+  let dates = null; // the Date and Range controls
   // sel: { kind: 'point', key (a day, week or month) } or { kind: 'weekday', key (0 = Monday) }
-  const S = { preset: 'last4', from: 0, to: 0, g: 'weekly', sel: null };
+  const S = Object.assign(R.noDates(), { g: 'weekly', sel: null });
+  let lo = 1, hi = 0; // the days the dates cover; none before a date is picked
 
-  const presetRange = id => CN.ranges.range(id, K.minDay, K.maxDay);
   const weekdayOf = d => (((d - F.EPOCH + 3) % 7) + 7) % 7; // 1970-01-01 was a Thursday
   const plural = w => WEEKDAYS[w] + 's';
   const add = (t, i) => {
@@ -41,6 +42,7 @@
   // weekday chart the other points when a point is selected, as in Power BI; the cards and the table
   // respect either.
   function compute() {
+    [lo, hi] = R.span(S, K.minDay, K.maxDay) || [1, 0];
     const bucket = K.bucket[S.g];
     const point = S.sel && S.sel.kind === 'point' ? S.sel.key : null;
     const wday = S.sel && S.sel.kind === 'weekday' ? S.sel.key : null;
@@ -50,7 +52,7 @@
     const rows = [];
     for (let i = 0; i < K.n; i++) {
       const d = K.day[i];
-      if (d < S.from || d > S.to) continue;
+      if (d < lo || d > hi) continue;
       const b = bucket[i], w = weekdayOf(d);
       if (wday === null || w === wday) {
         let t = trend.get(b);
@@ -85,6 +87,10 @@
   /* ---------- page ---------- */
 
   function render() {
+    if (!R.picked(S)) {
+      renderEmpty();
+      return;
+    }
     let r = compute();
     // A point or weekday that the new dates or Dynamic Date don't have any more.
     if (S.sel && (S.sel.kind === 'point' ? !r.keys.includes(S.sel.key) : !r.weekdays.some(t => t.w === S.sel.key))) {
@@ -124,6 +130,26 @@
     saveHash();
   }
 
+  // Before a date is picked: no numbers, and the prompt in the charts and the table.
+  function renderEmpty() {
+    S.sel = null;
+    last = null;
+    syncControls();
+    for (const id of ['calls-kpi-total', 'calls-kpi-inbound', 'calls-kpi-outbound', 'calls-kpi-answered', 'calls-kpi-missed', 'calls-kpi-rate']) {
+      setKpi(id, '–', R.NO_DATES);
+    }
+    $('calls-kpi-daily').textContent = '';
+    CN.charts.fitKpis($('view-calls'));
+    CN.charts.message(charts.total, R.NO_DATES);
+    CN.charts.message(charts.rate, R.NO_DATES);
+    CN.charts.bars(charts.weekday, [], { empty: R.NO_DATES, fill: true });
+    table.set([]);
+    $('calls-context').textContent = R.NO_DATES;
+    $('calls-export').disabled = true;
+    $('calls-selection').hidden = true;
+    saveHash();
+  }
+
   function setKpi(id, text, title) {
     const el = $(id);
     el.textContent = text;
@@ -131,13 +157,11 @@
   }
 
   function syncControls() {
-    $('calls-from').value = F.iso(S.from);
-    $('calls-to').value = F.iso(S.to);
-    $('calls-preset').value = S.preset;
+    dates.sync();
     $('calls-granularity').value = S.g;
   }
 
-  const rangePhrase = () => (S.from === S.to ? F.dayLong(S.from) : `${F.dayLong(S.from)} – ${F.dayLong(S.to)}`);
+  const rangePhrase = () => R.phrase(S, K.minDay, K.maxDay);
   const selectionPhrase = () => (S.sel.kind === 'point' ? GRAN[S.g].phrase(S.sel.key) : plural(S.sel.key));
 
   function ensureCharts() {
@@ -165,11 +189,7 @@
 
   function toParams() {
     const p = new URLSearchParams();
-    p.set('range', S.preset);
-    if (S.preset === 'custom') {
-      p.set('from', F.iso(S.from));
-      p.set('to', F.iso(S.to));
-    }
+    R.toParams(p, S);
     p.set('g', S.g);
     if (S.sel && S.sel.kind === 'point') p.set('sel', F.iso(S.sel.key));
     if (S.sel && S.sel.kind === 'weekday') p.set('weekday', WEEKDAYS[S.sel.key]);
@@ -178,16 +198,7 @@
 
   function applyParams(p) {
     if (GRAN[p.get('g')]) S.g = p.get('g');
-    const range = p.get('range');
-    const from = F.fromIso(p.get('from')), to = F.fromIso(p.get('to'));
-    if (PRESETS[range] && range !== 'custom') {
-      S.preset = range;
-      [S.from, S.to] = presetRange(range);
-    } else if (from !== null && to !== null) {
-      S.preset = 'custom';
-      S.from = Math.min(from, to);
-      S.to = Math.max(from, to);
-    }
+    R.applyParams(p, S, K.minDay, K.maxDay);
     const point = F.fromIso(p.get('sel'));
     const w = WEEKDAYS.findIndex(n => n.toLowerCase() === String(p.get('weekday')).toLowerCase());
     S.sel = point !== null ? { kind: 'point', key: point } : w >= 0 ? { kind: 'weekday', key: w } : null;
@@ -202,25 +213,7 @@
   /* ---------- wiring ---------- */
 
   function init() {
-    const preset = $('calls-preset');
-    for (const [id, p] of Object.entries(PRESETS)) preset.add(new Option(p.name, id));
-    preset.addEventListener('change', () => {
-      if (preset.value === 'custom') return;
-      S.preset = preset.value;
-      [S.from, S.to] = presetRange(preset.value);
-      render();
-    });
-    const onDate = () => {
-      let a = F.fromIso($('calls-from').value), b = F.fromIso($('calls-to').value);
-      if (a === null || b === null) return;
-      if (a > b) [a, b] = [b, a];
-      S.from = a;
-      S.to = b;
-      S.preset = 'custom';
-      render();
-    };
-    $('calls-from').addEventListener('change', onDate);
-    $('calls-to').addEventListener('change', onDate);
+    dates = R.controls({ from: 'calls-from', to: 'calls-to', preset: 'calls-preset' }, S, () => [K.minDay, K.maxDay], render);
     $('calls-granularity').addEventListener('change', e => {
       S.g = e.target.value;
       if (S.sel && S.sel.kind === 'point') S.sel = null; // a weekday stays selected
@@ -232,7 +225,7 @@
     });
     new ResizeObserver(() => CN.charts.fitKpis($('view-calls'))).observe($('calls-kpis'));
     table = CN.table.create({ table: 'calls-table', more: 'calls-more' }, TABLE_COLUMNS);
-    $('calls-export').addEventListener('click', () => table.download(`calls_${F.iso(S.from)}_to_${F.iso(S.to)}.csv`));
+    $('calls-export').addEventListener('click', () => table.download(`calls_${F.iso(lo)}_to_${F.iso(hi)}.csv`));
   }
 
   function load(book) {
@@ -247,12 +240,8 @@
     $('calls-problem').textContent = K ? '' : `${problem} The Call Report page needs that sheet, with the columns ` +
       'Date, Total Calls, Total Inbound, Total Outbound, Answered and Missed.';
     if (!K) return;
-    Object.assign(S, { preset: 'last4', g: 'weekly', sel: null });
-    [S.from, S.to] = presetRange('last4');
-    for (const id of ['calls-from', 'calls-to']) {
-      $(id).min = F.iso(K.minDay);
-      $(id).max = F.iso(K.maxDay);
-    }
+    Object.assign(S, R.noDates(), { g: 'weekly', sel: null });
+    dates.limit(K.minDay, K.maxDay);
   }
 
   function show(params) {

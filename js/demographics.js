@@ -7,7 +7,7 @@
   'use strict';
   const F = CN.fmt;
   const $ = id => document.getElementById(id);
-  const PRESETS = CN.ranges.PRESETS;
+  const R = CN.ranges;
   const { PIE_COLORS: COLORS, GRAY } = CN.charts;
   const TOP = COLORS.length; // slices with a color of their own; the rest go in "Other"
   const NARROW = 420; // px: below this a pie's names are left to its legend
@@ -15,7 +15,8 @@
   const lower = s => s.toLowerCase();
 
   // The two halves. p: address parameter prefix; charts: one per field, with the words for what
-  // "Other" counts. data, keys, S and the ECharts instances are filled in by load() and show().
+  // "Other" counts. S and dates (the half's dates and their controls) are set up by init(); data,
+  // keys and the ECharts instances by load() and show(); lo and hi by bound().
   const HALVES = {
     pickups: {
       p: 'p', title: 'pick-ups', charts: [
@@ -28,14 +29,17 @@
 
   const keyOf = (h, field, code) => (code < 0 ? '(blank)' : h.keys[field][code]);
   const labelOf = (h, field, code) => (code < 0 ? '(Blank)' : h.data.labels[field][code]);
-  const inRange = (h, i) => h.data.day[i] >= h.S.from && h.data.day[i] <= h.S.to;
+  // Sets a half's lo and hi from its dates, before a pass over the rows; none before a date is picked.
+  const bound = h => { [h.lo, h.hi] = R.span(h.S, h.data.minDay, h.data.maxDay) || [1, 0]; };
+  const inRange = (h, i) => h.data.day[i] >= h.lo && h.data.day[i] <= h.hi;
   const picked = (h, field, i) => !h.S.sel || h.S.sel.field !== field || keyOf(h, field, h.data[field][i]) === h.S.sel.key;
-  const rangePhrase = S => (S.from === S.to ? F.dayLong(S.from) : `${F.dayLong(S.from)} – ${F.dayLong(S.to)}`);
+  const rangePhrase = h => R.phrase(h.S, h.data.minDay, h.data.maxDay);
   const selectionPhrase = S => `${NAMES[S.sel.field]}: ${S.sel.label}`;
 
   // A half's slices: each chart is filtered by its half's selection on the other field and shows its
   // own selection highlighted.
   function compute(h) {
+    bound(h);
     const D = h.data;
     const sums = h.charts.map(c => new Float64Array(D.labels[c.field].length + 1)); // the last slot: blank
     let lines = 0;
@@ -75,24 +79,25 @@
 
   function render(h) {
     const S = h.S;
+    const dated = R.picked(S);
+    if (!dated) S.sel = null;
     const r = compute(h);
-    $(`demo-${h.p}-from`).value = F.iso(S.from);
-    $(`demo-${h.p}-to`).value = F.iso(S.to);
-    $(`demo-${h.p}-preset`).value = S.preset;
+    h.dates.sync();
     h.charts.forEach((c, j) => {
       const { items } = r.lists[j];
       c.items = items;
       c.narrow = c.chart.getWidth() < NARROW;
       CN.charts.pie(c.chart, items, {
         selKey: S.sel && S.sel.field === c.field ? S.sel.key : null, narrow: c.narrow,
-        empty: S.sel ? `Nothing to show for ${S.sel.label} in this date range` : `No ${h.title} in this date range`,
+        empty: !dated ? R.NO_DATES : S.sel ? `Nothing to show for ${S.sel.label} in this date range` : `No ${h.title} in this date range`,
         hint: h.charts.length > 1 ? 'Click to filter the other chart' : 'Click to pick it for Details',
         amount: v => '$' + F.short(v),
       });
     });
     const btn = $(`demo-${h.p}-details`);
     btn.disabled = !r.lines;
-    btn.title = r.lines ? `List the ${h.title} for ${S.sel ? selectionPhrase(S) + ', ' : ''}${rangePhrase(S)}` : `No ${h.title} to list`;
+    btn.title = !dated ? R.NO_DATES
+      : r.lines ? `List the ${h.title} for ${S.sel ? selectionPhrase(S) + ', ' : ''}${rangePhrase(h)}` : `No ${h.title} to list`;
     $(`demo-${h.p}-selection`).hidden = !S.sel;
     if (S.sel) $(`demo-${h.p}-selection-label`).textContent = selectionPhrase(S);
     saveHash();
@@ -140,12 +145,14 @@
       return;
     }
     const S = h.S;
+    bound(h);
+    const [a, b] = R.span(S, h.data.minDay, h.data.maxDay) || [h.data.minDay, h.data.maxDay];
     const opts = {
-      phrase: `${rangePhrase(S)} · ${S.sel ? selectionPhrase(S) : 'All ' + h.title}`,
+      phrase: `${rangePhrase(h)} · ${S.sel ? selectionPhrase(S) : 'All ' + h.title}`,
       hash: `#/demographics/${h === HALVES.pickups ? 'pickups' : 'mail'}?${toParams()}`,
       back: `#/demographics?${toParams()}`,
       backLabel: 'Back to Demographics',
-      file: `${h === HALVES.pickups ? 'pick-up-detail' : 'mail-details'}_${F.iso(S.from)}_to_${F.iso(S.to)}.csv`,
+      file: `${h === HALVES.pickups ? 'pick-up-detail' : 'mail-details'}_${F.iso(a)}_to_${F.iso(b)}.csv`,
     };
     if (h === HALVES.pickups) {
       CN.pickups.detail(Object.assign(opts, { match: i => inRange(h, i) && picked(h, 'state', i) && picked(h, 'city', i) }));
@@ -161,11 +168,7 @@
     for (const h of Object.values(HALVES)) {
       if (!h.data) continue;
       const S = h.S;
-      q.set(`${h.p}range`, S.preset);
-      if (S.preset === 'custom') {
-        q.set(`${h.p}from`, F.iso(S.from));
-        q.set(`${h.p}to`, F.iso(S.to));
-      }
+      R.toParams(q, S, h.p);
       if (S.sel) q.set(`${h.p}${S.sel.field}`, S.sel.label);
     }
     return q.toString();
@@ -175,16 +178,7 @@
     for (const h of Object.values(HALVES)) {
       if (!h.data) continue;
       const S = h.S;
-      const range = q.get(`${h.p}range`);
-      const from = F.fromIso(q.get(`${h.p}from`)), to = F.fromIso(q.get(`${h.p}to`));
-      if (PRESETS[range] && range !== 'custom') {
-        S.preset = range;
-        [S.from, S.to] = CN.ranges.range(range, h.data.minDay, h.data.maxDay);
-      } else if (from !== null && to !== null) {
-        S.preset = 'custom';
-        S.from = Math.min(from, to);
-        S.to = Math.max(from, to);
-      }
+      R.applyParams(q, S, h.data.minDay, h.data.maxDay, h.p);
       S.sel = null;
       for (const c of h.charts) {
         const label = q.get(`${h.p}${c.field}`);
@@ -203,23 +197,9 @@
 
   function init() {
     for (const [name, h] of Object.entries(HALVES)) {
-      const preset = $(`demo-${h.p}-preset`);
-      for (const [id, p] of Object.entries(PRESETS)) preset.add(new Option(p.name, id));
-      preset.addEventListener('change', () => {
-        if (preset.value === 'custom') return;
-        h.S.preset = preset.value;
-        [h.S.from, h.S.to] = CN.ranges.range(preset.value, h.data.minDay, h.data.maxDay);
-        render(h);
-      });
-      const onDate = () => {
-        let a = F.fromIso($(`demo-${h.p}-from`).value), b = F.fromIso($(`demo-${h.p}-to`).value);
-        if (a === null || b === null) return;
-        if (a > b) [a, b] = [b, a];
-        Object.assign(h.S, { from: a, to: b, preset: 'custom' });
-        render(h);
-      };
-      $(`demo-${h.p}-from`).addEventListener('change', onDate);
-      $(`demo-${h.p}-to`).addEventListener('change', onDate);
+      h.S = Object.assign(R.noDates(), { sel: null });
+      h.dates = R.controls({ from: `demo-${h.p}-from`, to: `demo-${h.p}-to`, preset: `demo-${h.p}-preset` },
+        h.S, () => [h.data.minDay, h.data.maxDay], () => render(h));
       $(`demo-${h.p}-clear`).addEventListener('click', () => { h.S.sel = null; render(h); });
       $(`demo-${h.p}-details`).addEventListener('click', () => { location.hash = `#/demographics/${name}?${toParams()}`; });
     }
@@ -246,12 +226,8 @@
     for (const h of Object.values(HALVES)) {
       if (!h.data) continue;
       h.keys = Object.fromEntries(h.charts.map(c => [c.field, h.data.labels[c.field].map(lower)]));
-      h.S = { preset: 'last4', sel: null };
-      [h.S.from, h.S.to] = CN.ranges.range('last4', h.data.minDay, h.data.maxDay);
-      for (const end of ['from', 'to']) {
-        $(`demo-${h.p}-${end}`).min = F.iso(h.data.minDay);
-        $(`demo-${h.p}-${end}`).max = F.iso(h.data.maxDay);
-      }
+      Object.assign(h.S, R.noDates(), { sel: null });
+      h.dates.limit(h.data.minDay, h.data.maxDay);
     }
   }
 

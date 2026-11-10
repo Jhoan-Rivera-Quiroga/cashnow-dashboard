@@ -6,7 +6,7 @@
   'use strict';
   const F = CN.fmt;
   const $ = id => document.getElementById(id);
-  const PRESETS = CN.ranges.PRESETS;
+  const R = CN.ranges;
   const KINDS = { reason: 'Reason', status: 'Status' }; // address parameter: name in the selection
   const TABLE_COLUMNS = [
     { key: 'day', label: 'Collection Date', type: 'day' },
@@ -78,10 +78,11 @@
   let C = null, problem = null; // the Return sheet's rows from CN.data, or null and why there are none
   let groups = null; // per text code: each reason's and status's group, each First Name's name and phones
   let charts = null, table = null;
-  const S = { preset: 'last4', from: 0, to: 0, sel: null }; // sel: { kind: 'reason' | 'status', key, label }
+  let dates = null; // the Date and Range controls
+  const S = Object.assign(R.noDates(), { sel: null }); // sel: { kind: 'reason' | 'status', key, label }
+  let lo = 1, hi = 0; // the days the dates cover; none before a date is picked
 
   const lower = s => s.toLowerCase();
-  const presetRange = id => CN.ranges.range(id, C.minDay, C.maxDay);
   const reasonOf = i => (C.reason[i] < 0 ? BLANK : groups.reason[C.reason[i]]);
   const statusOf = i => (C.status[i] < 0 ? BLANK : groups.status[C.status[i]]);
   const bump = (m, k) => m.set(k, (m.get(k) || 0) + 1);
@@ -90,12 +91,15 @@
   // which also respect the selection. Each chart is filtered by what's selected in the other and
   // shows its own selection highlighted, as in Power BI.
   function render() {
+    const dated = R.picked(S);
+    if (!dated) S.sel = null;
+    [lo, hi] = R.span(S, C.minDay, C.maxDay) || [1, 0];
     syncControls();
     const byReason = new Map(), byStatus = new Map();
     const rows = [];
     let notCancelled = 0, noNeed = 0, done = 0;
     for (let i = 0; i < C.n; i++) {
-      if (C.day[i] < S.from || C.day[i] > S.to) continue;
+      if (C.day[i] < lo || C.day[i] > hi) continue;
       const reason = reasonOf(i), status = statusOf(i);
       const okReason = !S.sel || S.sel.kind !== 'reason' || lower(reason) === S.sel.key;
       const okStatus = !S.sel || S.sel.kind !== 'status' || lower(status) === S.sel.key;
@@ -116,20 +120,25 @@
     }
 
     const total = rows.length, needed = total - noNeed;
-    setKpi('can-kpi-total', F.int(total), F.count(total, 'cancelled pick-up', 'cancelled pick-ups'));
-    setKpi('can-kpi-real', F.int(total - notCancelled), notCancelled
-      ? `${F.int(total)} minus ${F.count(notCancelled, 'duplicate or test', 'duplicates and tests')}` : 'No duplicates or tests here');
-    setKpi('can-kpi-rate', needed ? F.pct(done / needed) : '–', needed
-      ? `${F.int(done)} follow-ups done of the ${F.count(needed, 'cancellation', 'cancellations')} that needed one (all but "${NO_NEED}")`
-      : 'None of these needed a follow-up');
+    if (dated) {
+      setKpi('can-kpi-total', F.int(total), F.count(total, 'cancelled pick-up', 'cancelled pick-ups'));
+      setKpi('can-kpi-real', F.int(total - notCancelled), notCancelled
+        ? `${F.int(total)} minus ${F.count(notCancelled, 'duplicate or test', 'duplicates and tests')}` : 'No duplicates or tests here');
+      setKpi('can-kpi-rate', needed ? F.pct(done / needed) : '–', needed
+        ? `${F.int(done)} follow-ups done of the ${F.count(needed, 'cancellation', 'cancellations')} that needed one (all but "${NO_NEED}")`
+        : 'None of these needed a follow-up');
+    } else {
+      for (const id of ['can-kpi-total', 'can-kpi-real', 'can-kpi-rate']) setKpi(id, '–', R.NO_DATES);
+    }
     CN.charts.fitKpis($('view-cancelled'));
 
-    const none = S.sel ? `Nothing to show for ${S.sel.label} in this date range` : 'No cancelled pick-ups in this date range';
+    const none = !dated ? R.NO_DATES : S.sel ? `Nothing to show for ${S.sel.label} in this date range` : 'No cancelled pick-ups in this date range';
     draw(charts.reason, byReason, 'reason', none);
     draw(charts.status, byStatus, 'status', none);
 
     table.set(rows);
-    $('can-context').textContent = [rangePhrase(), S.sel ? selectionPhrase() : '', F.count(total, 'row', 'rows')].filter(Boolean).join(' · ');
+    $('can-context').textContent = !dated ? R.NO_DATES
+      : [rangePhrase(), S.sel ? selectionPhrase() : '', F.count(total, 'row', 'rows')].filter(Boolean).join(' · ');
     $('can-export').disabled = !total;
     $('can-selection').hidden = !S.sel;
     if (S.sel) $('can-selection-label').textContent = selectionPhrase();
@@ -155,12 +164,10 @@
   }
 
   function syncControls() {
-    $('can-from').value = F.iso(S.from);
-    $('can-to').value = F.iso(S.to);
-    $('can-preset').value = S.preset;
+    dates.sync();
   }
 
-  const rangePhrase = () => (S.from === S.to ? F.dayLong(S.from) : `${F.dayLong(S.from)} – ${F.dayLong(S.to)}`);
+  const rangePhrase = () => R.phrase(S, C.minDay, C.maxDay);
   const selectionPhrase = () => `${KINDS[S.sel.kind]}: ${S.sel.label}`;
 
   function ensureCharts() {
@@ -183,27 +190,14 @@
 
   function toParams() {
     const p = new URLSearchParams();
-    p.set('range', S.preset);
-    if (S.preset === 'custom') {
-      p.set('from', F.iso(S.from));
-      p.set('to', F.iso(S.to));
-    }
+    R.toParams(p, S);
     // A status typed some other way stays out of the address, which holds only the page's own names.
     if (S.sel && known(S.sel.kind, S.sel.label)) p.set(S.sel.kind, S.sel.label);
     return p.toString();
   }
 
   function applyParams(p) {
-    const range = p.get('range');
-    const from = F.fromIso(p.get('from')), to = F.fromIso(p.get('to'));
-    if (PRESETS[range] && range !== 'custom') {
-      S.preset = range;
-      [S.from, S.to] = presetRange(range);
-    } else if (from !== null && to !== null) {
-      S.preset = 'custom';
-      S.from = Math.min(from, to);
-      S.to = Math.max(from, to);
-    }
+    R.applyParams(p, S, C.minDay, C.maxDay);
     S.sel = null;
     for (const kind of Object.keys(KINDS)) {
       const label = p.get(kind) && known(kind, p.get(kind));
@@ -220,32 +214,14 @@
   /* ---------- wiring ---------- */
 
   function init() {
-    const preset = $('can-preset');
-    for (const [id, p] of Object.entries(PRESETS)) preset.add(new Option(p.name, id));
-    preset.addEventListener('change', () => {
-      if (preset.value === 'custom') return;
-      S.preset = preset.value;
-      [S.from, S.to] = presetRange(preset.value);
-      render();
-    });
-    const onDate = () => {
-      let a = F.fromIso($('can-from').value), b = F.fromIso($('can-to').value);
-      if (a === null || b === null) return;
-      if (a > b) [a, b] = [b, a];
-      S.from = a;
-      S.to = b;
-      S.preset = 'custom';
-      render();
-    };
-    $('can-from').addEventListener('change', onDate);
-    $('can-to').addEventListener('change', onDate);
+    dates = R.controls({ from: 'can-from', to: 'can-to', preset: 'can-preset' }, S, () => [C.minDay, C.maxDay], render);
     $('can-clear').addEventListener('click', () => { S.sel = null; render(); });
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape' && S.sel && document.body.dataset.view === 'cancelled') { S.sel = null; render(); }
     });
     new ResizeObserver(() => CN.charts.fitKpis($('view-cancelled'))).observe($('can-kpis'));
     table = CN.table.create({ table: 'can-table', more: 'can-more' }, TABLE_COLUMNS);
-    $('can-export').addEventListener('click', () => table.download(`cancelled_${F.iso(S.from)}_to_${F.iso(S.to)}.csv`));
+    $('can-export').addEventListener('click', () => table.download(`cancelled_${F.iso(lo)}_to_${F.iso(hi)}.csv`));
   }
 
   function load(book) {
@@ -268,12 +244,8 @@
       namePhones: L.name.map(phonesIn),
       phone: L.phone.map(t => phonesIn(t) || t), // as typed when it holds no phone number
     };
-    Object.assign(S, { preset: 'last4', sel: null });
-    [S.from, S.to] = presetRange('last4');
-    for (const id of ['can-from', 'can-to']) {
-      $(id).min = F.iso(C.minDay);
-      $(id).max = F.iso(C.maxDay);
-    }
+    Object.assign(S, R.noDates(), { sel: null });
+    dates.limit(C.minDay, C.maxDay);
   }
 
   function show(params) {
