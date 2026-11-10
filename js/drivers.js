@@ -6,11 +6,8 @@
   'use strict';
   const F = CN.fmt;
   const $ = id => document.getElementById(id);
-  const { INK, esc, hint } = CN.charts;
-  // Category colors in a fixed order, checked for color-blind separation. A category keeps its
-  // color whatever is filtered; past seven categories the rest share "Other".
-  const COLORS = ['#8e3fa3', '#e044a7', '#c8a200', '#118dff', '#e66c37', '#744ec2', '#1aab40'];
-  const GRAY = '#a59aa3';
+  // A category keeps its color whatever is filtered; past seven categories the rest share "Other".
+  const { PIE_COLORS: COLORS, GRAY } = CN.charts;
   const KINDS = ['driver', 'concept', 'bonus']; // what can be selected, and its address parameter
   const PRESETS = CN.ranges.PRESETS;
 
@@ -24,7 +21,6 @@
   let table = null; // the Driver Payout Detail table
 
   const lower = s => s.toLowerCase();
-  const pct = F.pct;
   const presetRange = id => CN.ranges.range(id, first, last);
 
   // Lowercased names to match the selection on, and each category's color slot.
@@ -148,44 +144,8 @@
     $('drv-preset').value = S.preset;
   }
 
-  // Pie or donut with each slice's name and share beside it, and a legend that also gives the amounts.
   function setPie(chart, items, selKey, donut, emptyText) {
-    if (!items.length) {
-      chart.setOption(CN.charts.empty(emptyText), true);
-      return;
-    }
-    const sum = items.reduce((s, it) => s + it.value, 0);
-    const byName = new Map(items.map(it => [it.label, it]));
-    chart.setOption({
-      animationDuration: 300,
-      textStyle: { fontFamily: CN.charts.font() },
-      tooltip: {
-        trigger: 'item',
-        formatter: p => {
-          const it = byName.get(p.name);
-          const more = it.key === null ? '' : hint(it.key === selKey ? 'Click again to clear' : 'Click to filter the other payout charts');
-          return `${esc(p.name)}<br><b>${F.money(p.value)}</b> · ${pct(p.value / sum)}` + more;
-        },
-      },
-      legend: {
-        bottom: 0, left: 'center', selectedMode: false,
-        icon: 'circle', itemWidth: 10, itemHeight: 10, itemGap: 14,
-        textStyle: { color: INK, fontSize: 12 },
-        formatter: name => `${name}  ${F.money(byName.get(name).value)}`,
-      },
-      series: [{
-        type: 'pie', radius: donut ? ['40%', '64%'] : [0, '64%'], center: ['50%', '43%'], startAngle: 90,
-        itemStyle: { borderColor: '#fff', borderWidth: 2 },
-        label: { show: !narrowPies, color: INK, fontSize: 12, formatter: p => `${p.name} ${pct(p.value / sum)}` },
-        labelLine: { length: 8, length2: 10 },
-        labelLayout: { hideOverlap: true },
-        emphasis: { scaleSize: 4 },
-        data: items.map(it => ({
-          name: it.label, value: it.value, key: it.key, cursor: it.key === null ? 'default' : 'pointer',
-          itemStyle: { color: it.color, opacity: selKey === null || it.key === selKey ? 1 : 0.3 },
-        })),
-      }],
-    }, true);
+    CN.charts.pie(chart, items, { selKey, donut, narrow: narrowPies, empty: emptyText, hint: 'Click to filter the other payout charts' });
   }
 
   // Clicking a selected bar or slice again clears the selection.

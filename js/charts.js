@@ -1,10 +1,14 @@
-/* Chart pieces the report pages share: trend lines, ranked horizontal bars and the empty-chart
+/* Chart pieces the report pages share: trend lines, ranked horizontal bars, pies and the empty-chart
    message. */
 (function (CN) {
   'use strict';
   const F = CN.fmt;
   const INK = '#252423', MUTED = '#6e5a6b';
   const BAR = '#e044a7', LINE = '#6b007b';
+  // Pie slice colors in a fixed order, checked for color-blind separation. Past seven slices the
+  // rest share gray "Other".
+  const PIE_COLORS = ['#8e3fa3', '#e044a7', '#c8a200', '#118dff', '#e66c37', '#744ec2', '#1aab40'];
+  const GRAY = '#a59aa3';
   const ROW = 26; // px per bar; a long list scrolls inside its card
   // The page's font, for chart text too. Without a font on the labels, ECharts sizes the bar charts'
   // label column for one font but draws in another (Microsoft YaHei on Windows, which is wider), so
@@ -16,8 +20,12 @@
   const esc = s => String(s).replace(/[&<>"']/g, c => ESC[c]);
   const hint = text => `<br><span style="color:#8a7a88">${text}</span>`;
 
-  const empty = text => ({
-    graphic: { type: 'text', left: 'center', top: 'middle', style: { text, fill: MUTED, fontSize: 13, fontFamily: FONT() } },
+  // A message in place of a chart; a size above 13 also makes it bold.
+  const empty = (text, size = 13) => ({
+    graphic: {
+      type: 'text', left: 'center', top: 'middle',
+      style: { text, fill: MUTED, fontSize: size, fontWeight: size > 13 ? 600 : 'normal', fontFamily: FONT() },
+    },
   });
 
   // Bar items for every code with an amount, largest first, at most n of them.
@@ -71,6 +79,53 @@
         data: items.map(it => ({ value: it.value, itemStyle: { opacity: selKey === null || it.key === selKey ? 1 : 0.3 } })),
         itemStyle: { color: BAR, borderRadius: [0, 4, 4, 0] },
         label: { show: true, position: 'right', color: INK, fontSize: 12, formatter: p => label(p.value) },
+      }],
+    }, true);
+  }
+
+  // A pie or donut with each slice's name and share beside it, and a legend that also gives each
+  // slice's amount. items: [{ label, key, value, color }], in the order to draw; a null key can't be
+  // selected. opts: { selKey (full color, the rest faded), donut, narrow (leave the names to the
+  // legend), empty (message for no items), hint (tooltip line), amount (legend value text, money by
+  // default) }.
+  function pie(chart, items, opts) {
+    chart.dispatchAction({ type: 'hideTip' }); // see bars()
+    if (!items.length) {
+      chart.setOption(empty(opts.empty), true);
+      return;
+    }
+    const selKey = opts.selKey === undefined ? null : opts.selKey;
+    const amount = opts.amount || F.money;
+    const sum = items.reduce((s, it) => s + it.value, 0);
+    const byName = new Map(items.map(it => [it.label, it]));
+    chart.setOption({
+      animationDuration: 300,
+      textStyle: { fontFamily: FONT() },
+      tooltip: {
+        trigger: 'item',
+        formatter: p => {
+          const it = byName.get(p.name);
+          const more = it.key === null ? '' : hint(it.key === selKey ? 'Click again to clear' : opts.hint);
+          return `${esc(p.name)}<br><b>${F.money(p.value)}</b> · ${F.pct(p.value / sum)}` + more;
+        },
+      },
+      legend: {
+        bottom: 0, left: 'center', selectedMode: false,
+        icon: 'circle', itemWidth: 10, itemHeight: 10, itemGap: 14,
+        textStyle: { color: INK, fontSize: 12 },
+        formatter: name => `${name}  ${amount(byName.get(name).value)}`,
+      },
+      series: [{
+        type: 'pie', radius: opts.donut ? ['40%', '64%'] : [0, '64%'], center: ['50%', '43%'], startAngle: 90,
+        itemStyle: { borderColor: '#fff', borderWidth: 2 },
+        label: { show: !opts.narrow, color: INK, fontSize: 12, formatter: p => `${p.name} ${F.pct(p.value / sum)}` },
+        labelLine: { length: 8, length2: 10 },
+        labelLayout: { hideOverlap: true },
+        emphasis: { scaleSize: 4 },
+        data: items.map(it => ({
+          name: it.label, value: it.value, key: it.key, cursor: it.key === null ? 'default' : 'pointer',
+          itemStyle: { color: it.color, opacity: selKey === null || it.key === selKey ? 1 : 0.3 },
+        })),
       }],
     }, true);
   }
@@ -163,5 +218,5 @@
     });
   }
 
-  CN.charts = { ranked, bars, line, pointAt, fitKpis, empty, esc, hint, font: FONT, INK, MUTED };
+  CN.charts = { ranked, bars, pie, line, pointAt, fitKpis, empty, esc, hint, font: FONT, INK, MUTED, PIE_COLORS, GRAY };
 })(window.CashNow = window.CashNow || {});

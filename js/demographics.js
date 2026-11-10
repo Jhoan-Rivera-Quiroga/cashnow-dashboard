@@ -1,22 +1,29 @@
 /* Demographics page: where the pick-ups and the mail orders come from, mirroring the Power BI page of
-   the same name. Power BI's two maps don't draw and its city pie has about 150 slices, so this page
-   uses ranked bars by state and by city, with the smaller cities summed into "Other". Each half has
-   its own dates; clicking a state or a city filters its half, and Details lists the pick-ups or mail
-   orders behind it. */
+   the same name. Power BI's two maps don't draw and its city pie has about 150 slices, so each pie
+   here shows the seven largest states or cities and sums the rest into "Other". Each half has its own
+   dates; clicking a state or a city filters its half, and Details lists the pick-ups or mail orders
+   behind it. */
 (function (CN) {
   'use strict';
   const F = CN.fmt;
   const $ = id => document.getElementById(id);
   const PRESETS = CN.ranges.PRESETS;
+  const { PIE_COLORS: COLORS, GRAY } = CN.charts;
+  const TOP = COLORS.length; // slices with a color of their own; the rest go in "Other"
+  const NARROW = 420; // px: below this a pie's names are left to its legend
   const NAMES = { state: 'State', city: 'City' };
   const lower = s => s.toLowerCase();
-  const pct = F.pct;
 
-  // The two halves. p: address parameter prefix; charts: one per field, `top` bars at most and the
-  // rest as "Other". data, keys, S and the ECharts instances are filled in by load() and show().
+  // The two halves. p: address parameter prefix; charts: one per field, with the words for what
+  // "Other" counts. data, keys, S and the ECharts instances are filled in by load() and show().
   const HALVES = {
-    pickups: { p: 'p', title: 'pick-ups', charts: [{ field: 'state', el: 'chart-demo-pstate' }, { field: 'city', el: 'chart-demo-pcity', top: 15, other: 'cities' }] },
-    mail: { p: 'm', title: 'mail orders', charts: [{ field: 'state', el: 'chart-demo-mstate' }] },
+    pickups: {
+      p: 'p', title: 'pick-ups', charts: [
+        { field: 'state', el: 'chart-demo-pstate', one: 'state', many: 'states' },
+        { field: 'city', el: 'chart-demo-pcity', one: 'city', many: 'cities' },
+      ],
+    },
+    mail: { p: 'm', title: 'mail orders', charts: [{ field: 'state', el: 'chart-demo-mstate', one: 'state', many: 'states' }] },
   };
 
   const keyOf = (h, field, code) => (code < 0 ? '(blank)' : h.keys[field][code]);
@@ -26,8 +33,8 @@
   const rangePhrase = S => (S.from === S.to ? F.dayLong(S.from) : `${F.dayLong(S.from)} – ${F.dayLong(S.to)}`);
   const selectionPhrase = S => `${NAMES[S.sel.field]}: ${S.sel.label}`;
 
-  // A half's bar lists: each chart is filtered by its half's selection on the other field and shows
-  // its own selection highlighted.
+  // A half's slices: each chart is filtered by its half's selection on the other field and shows its
+  // own selection highlighted.
   function compute(h) {
     const D = h.data;
     const sums = h.charts.map(c => new Float64Array(D.labels[c.field].length + 1)); // the last slot: blank
@@ -53,12 +60,13 @@
         if (Math.abs(v) >= 0.005) items.push({ label: labelOf(h, c.field, code), key: keyOf(h, c.field, code), value: v });
       }
       items.sort((a, b) => b.value - a.value);
-      const total = items.reduce((s, it) => s + it.value, 0);
-      if (c.top && items.length > c.top + 1) {
-        const rest = items.splice(c.top);
-        items.push({ label: `Other (${F.int(rest.length)} ${c.other})`, key: null, value: rest.reduce((s, it) => s + it.value, 0) });
+      if (items.length > TOP) {
+        const rest = items.splice(TOP);
+        items.push({ label: `Other (${F.count(rest.length, c.one, c.many)})`, key: null, value: rest.reduce((s, it) => s + it.value, 0) });
       }
-      return { items, total };
+      // Colors by size; blanks and "Other" are gray.
+      items.forEach((it, k) => { it.color = it.key === null || it.key === '(blank)' ? GRAY : COLORS[k]; });
+      return { items };
     });
     return { lists, lines };
   }
@@ -72,13 +80,14 @@
     $(`demo-${h.p}-to`).value = F.iso(S.to);
     $(`demo-${h.p}-preset`).value = S.preset;
     h.charts.forEach((c, j) => {
-      const { items, total } = r.lists[j];
+      const { items } = r.lists[j];
       c.items = items;
-      CN.charts.bars(c.chart, items, {
-        selKey: S.sel && S.sel.field === c.field ? S.sel.key : null,
+      c.narrow = c.chart.getWidth() < NARROW;
+      CN.charts.pie(c.chart, items, {
+        selKey: S.sel && S.sel.field === c.field ? S.sel.key : null, narrow: c.narrow,
         empty: S.sel ? `Nothing to show for ${S.sel.label} in this date range` : `No ${h.title} in this date range`,
         hint: h.charts.length > 1 ? 'Click to filter the other chart' : 'Click to pick it for Details',
-        label: v => `$${F.short(v)} · ${pct(v / total)}`, labelRoom: 120,
+        amount: v => '$' + F.short(v),
       });
     });
     const btn = $(`demo-${h.p}-details`);
@@ -93,7 +102,7 @@
     for (const h of Object.values(HALVES)) if (h.data) render(h);
   }
 
-  // Clicking a selected bar again clears the selection; "Other" can't be selected.
+  // Clicking a selected slice again clears the selection; "Other" can't be selected.
   function toggle(h, field, item) {
     if (!item || item.key === null) return;
     const S = h.S;
@@ -102,15 +111,24 @@
   }
 
   let resizer = null;
+  const byDom = new Map(); // chart element -> [half, chart]
   function ensureCharts() {
-    if (!resizer) resizer = new ResizeObserver(entries => entries.forEach(e => echarts.getInstanceByDom(e.target.firstElementChild).resize()));
+    if (!resizer) {
+      resizer = new ResizeObserver(entries => entries.forEach(e => {
+        const [h, c] = byDom.get(e.target);
+        c.chart.resize();
+        // Crossing the narrow width moves the names between the pie and its legend.
+        if ((c.chart.getWidth() < NARROW) !== c.narrow && document.body.dataset.view === 'demographics') render(h);
+      }));
+    }
     for (const h of Object.values(HALVES)) {
       if (!h.data) continue;
       for (const c of h.charts) {
         if (c.chart) continue;
         c.chart = echarts.init($(c.el));
         c.chart.on('click', p => toggle(h, c.field, c.items && c.items[p.dataIndex]));
-        resizer.observe(c.chart.getDom().parentElement);
+        byDom.set(c.chart.getDom(), [h, c]);
+        resizer.observe(c.chart.getDom());
       }
     }
   }
@@ -244,6 +262,8 @@
     else if (v === 'mail') details(HALVES.mail);
     else {
       ensureCharts();
+      // Each pie's width decides where its names go, so measure before drawing.
+      for (const h of Object.values(HALVES)) for (const c of h.charts) if (c.chart) c.chart.resize();
       renderAll();
     }
   }

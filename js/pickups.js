@@ -10,21 +10,30 @@
   let charts = null;
   let last = null; // latest compute() result
   let table = null; // the Pick Up Detail table
-  const S = { preset: 'last4', from: 0, to: 0, g: 'monthly', states: null, sel: null };
+  // The page opens with no dates and shows numbers once one is picked. A date left blank (null) leaves
+  // that end open: the first or last day in the data.
+  const S = { preset: '', from: null, to: null, g: 'monthly', states: null, sel: null };
+  const NO_DATES = 'Select a date to see data';
+  let blank = false; // the charts show NO_DATES
 
   const label = (field, code) => (code < 0 ? '' : P.labels[field][code]);
   const stateLabel = code => (code < 0 ? '(Blank)' : P.labels.state[code]);
 
   const presetRange = id => CN.ranges.range(id, P.minDay, P.maxDay);
+  const noDates = () => S.from === null && S.to === null;
+  const span = () => [S.from === null ? P.minDay : S.from, S.to === null ? P.maxDay : S.to];
 
-  function inScope(i) {
-    const d = P.day[i];
-    return d >= S.from && d <= S.to && (!S.states || S.states.has(P.state[i]));
+  // A test for the rows in the current dates and states; nothing passes before a date is picked.
+  function scope() {
+    if (noDates()) return () => false;
+    const [a, b] = span();
+    return i => P.day[i] >= a && P.day[i] <= b && (!S.states || S.states.has(P.state[i]));
   }
 
   // One pass over the rows: the trend series (date range + state only) and the KPIs,
   // which also respect the selected point.
   function compute() {
+    const inScope = scope();
     const bucket = P.bucket[S.g];
     const series = new Map();
     const orders = new Set();
@@ -66,23 +75,41 @@
   /* ---------- page ---------- */
 
   function render() {
-    let r = compute();
-    if (S.sel !== null && !r.keys.includes(S.sel)) {
-      S.sel = null;
-      r = compute();
-    }
-    last = r;
     syncControls();
-    renderKpis(r);
-    renderCharts(r);
+    if (noDates()) {
+      renderEmpty();
+    } else {
+      let r = compute();
+      if (S.sel !== null && !r.keys.includes(S.sel)) {
+        S.sel = null;
+        r = compute();
+      }
+      last = r;
+      renderKpis(r);
+      renderCharts(r);
+    }
     $('selection-bar').hidden = S.sel === null;
     if (S.sel !== null) $('selection-label').textContent = GRAN[S.g].phrase(S.sel);
     saveHash();
   }
 
+  // Before a date is picked: no numbers, and the prompt in both charts.
+  function renderEmpty() {
+    last = null;
+    S.sel = null;
+    for (const id of ['kpi-cash', 'kpi-pickups', 'kpi-avg']) setKpi(id, '–', NO_DATES);
+    for (const id of ['kpi-product', 'kpi-driver', 'kpi-vendor']) setTop(id, null);
+    const btn = $('details-btn');
+    btn.disabled = true;
+    btn.title = NO_DATES;
+    charts.forEach(c => c.setOption(CN.charts.empty(NO_DATES, 16), true));
+    blank = true;
+    CN.charts.fitKpis($('view-pickups'));
+  }
+
   function syncControls() {
-    $('date-from').value = F.iso(S.from);
-    $('date-to').value = F.iso(S.to);
+    $('date-from').value = S.from === null ? '' : F.iso(S.from);
+    $('date-to').value = S.to === null ? '' : F.iso(S.to);
     $('date-preset').value = S.preset;
     $('granularity').value = S.g;
     $('state-summary').textContent = stateSummary();
@@ -131,14 +158,20 @@
   }
 
   function renderCharts(r) {
+    if (blank) {
+      charts.forEach(c => c.clear()); // drop the prompt, which a trend's update would otherwise keep
+      blank = false;
+    }
     const opts = { gran: GRAN[S.g], sel: S.sel };
     CN.charts.line(charts[0], r.keys, r.cashSeries, Object.assign({ money: true }, opts));
     CN.charts.line(charts[1], r.keys, r.pickSeries, Object.assign({ unit: 'pick-ups' }, opts));
   }
 
   function scopePhrase() {
+    if (noDates()) return 'No dates selected';
     if (S.sel !== null) return GRAN[S.g].phrase(S.sel);
-    return S.from === S.to ? F.dayLong(S.from) : `${F.dayLong(S.from)} – ${F.dayLong(S.to)}`;
+    const [a, b] = span();
+    return a === b ? F.dayLong(a) : `${F.dayLong(a)} – ${F.dayLong(b)}`;
   }
 
   /* ---------- State slicer ---------- */
@@ -189,10 +222,12 @@
 
   function toParams() {
     const p = new URLSearchParams();
-    p.set('range', S.preset);
-    if (S.preset === 'custom') {
-      p.set('from', F.iso(S.from));
-      p.set('to', F.iso(S.to));
+    if (!noDates()) {
+      p.set('range', S.preset);
+      if (S.preset === 'custom') {
+        if (S.from !== null) p.set('from', F.iso(S.from));
+        if (S.to !== null) p.set('to', F.iso(S.to));
+      }
     }
     p.set('g', S.g);
     if (S.states) p.set('state', [...S.states].map(stateLabel).join('|'));
@@ -207,10 +242,10 @@
     if (PRESETS[range] && range !== 'custom') {
       S.preset = range;
       [S.from, S.to] = presetRange(range);
-    } else if (from !== null && to !== null) {
+    } else if (from !== null || to !== null) {
       S.preset = 'custom';
-      S.from = Math.min(from, to);
-      S.to = Math.max(from, to);
+      S.from = from !== null && to !== null ? Math.min(from, to) : from;
+      S.to = from !== null && to !== null ? Math.max(from, to) : to;
     }
     const st = p.get('state');
     if (st) {
@@ -248,14 +283,15 @@
   // The Pick Ups page's own drill-through: its date range, states and selected point.
   function pickupsDetail() {
     const bucket = P.bucket[S.g];
-    const scope = S.sel !== null ? F.iso(S.sel) : `${F.iso(S.from)}_to_${F.iso(S.to)}`;
+    const inScope = scope();
+    const [a, b] = span();
     return {
       match: i => inScope(i) && (S.sel === null || bucket[i] === S.sel),
       phrase: `${scopePhrase()} · State: ${stateSummary()}`,
       hash: `#/pickups/details?${toParams()}`,
       back: `#/pickups?${toParams()}`,
       backLabel: 'Back to Pick Ups',
-      file: `pick-up-detail_${scope}.csv`,
+      file: `pick-up-detail_${S.sel !== null ? F.iso(S.sel) : `${F.iso(a)}_to_${F.iso(b)}`}.csv`,
     };
   }
 
@@ -293,6 +329,10 @@
 
   function init() {
     const preset = $('date-preset');
+    const none = new Option('Select a range', ''); // shown until a range is picked
+    none.disabled = true;
+    none.hidden = true;
+    preset.add(none);
     for (const [id, p] of Object.entries(PRESETS)) preset.add(new Option(p.name, id));
     preset.addEventListener('change', () => {
       if (preset.value === 'custom') return;
@@ -300,13 +340,11 @@
       [S.from, S.to] = presetRange(preset.value);
       render();
     });
+    // One date is enough: a blank one leaves that end open. Clearing both empties the page again.
     const onDate = () => {
       let a = F.fromIso($('date-from').value), b = F.fromIso($('date-to').value);
-      if (a === null || b === null) return;
-      if (a > b) [a, b] = [b, a];
-      S.from = a;
-      S.to = b;
-      S.preset = 'custom';
+      if (a !== null && b !== null && a > b) [a, b] = [b, a];
+      Object.assign(S, { preset: a === null && b === null ? '' : 'custom', from: a, to: b });
       render();
     };
     $('date-from').addEventListener('change', onDate);
@@ -337,8 +375,7 @@
 
   function load(data) {
     P = data;
-    Object.assign(S, { preset: 'last4', g: 'monthly', states: null, sel: null });
-    [S.from, S.to] = presetRange('last4');
+    Object.assign(S, { preset: '', from: null, to: null, g: 'monthly', states: null, sel: null });
     for (const id of ['date-from', 'date-to']) {
       $(id).min = F.iso(P.minDay);
       $(id).max = F.iso(P.maxDay);

@@ -43,9 +43,10 @@ To use a file instead, choose **open a workbook file** on the start page, or dro
 
 The page works like the Power BI one:
 
-- **State**, **Date** and **Dynamic Date** (Daily / Weekly / Monthly) filter the page. **Range** has
-  quick choices such as *Last 4 months* (the default) or *Year to date*, counted back from the
-  latest date in the data.
+- The page opens with no dates and says "Select a date to see data". Pick a start or an end date (one
+  is enough: the other end is the first or last day in the data), or a **Range** choice such as
+  *Last 4 months* or *Year to date*, counted back from the latest date in the data. **State** and
+  **Dynamic Date** (Daily / Weekly / Monthly) filter the page too.
 - Clicking a point in either chart filters the cards to that day, week or month. Click it again, press
   Esc or use **Clear** to undo.
 - **Details** lists the pick-ups behind the current view. Without a selected point it lists the whole
@@ -80,10 +81,10 @@ vendors and top 10 products by mail cash spent. Clicking a vendor or a product f
 chart, and **Details** lists the order lines behind the view in the Mail Details table.
 
 The **Demographics** page shows where the business comes from. It has two halves, each with its own
-dates: pick-ups by state and by city (the top 15 cities, with the rest summed as "Other"), and mail
-orders by state. Power BI's maps on this page don't draw, and its city pie has about 150 slices, so
-this page uses bars with each one's share. Clicking a state or a city filters its half, and each
-half's **Details** lists the pick-ups or mail orders behind it.
+dates: pie charts of pick-ups by state and by city, and of mail orders by state. Each pie shows the
+seven largest states or cities and sums the rest as "Other", and its legend gives each slice's cash.
+Power BI's maps on this page don't draw, and its city pie has about 150 slices. Clicking a state or a
+city filters its half, and each half's **Details** lists the pick-ups or mail orders behind it.
 
 The **Cancelled** page lists the cancelled pick-ups in its date range, why they were cancelled, and
 whether someone followed up. Power BI's page has the **Total Cancelled Pick Ups** card and a table.
